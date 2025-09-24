@@ -33,8 +33,16 @@ export async function POST(request: NextRequest) {
 
     console.log("Fetching TechCrunch RSS feed...")
 
-    // Fetch TechCrunch RSS feed
-    const feed = await parser.parseURL("https://techcrunch.com/feed/")
+    // Add timeout protection
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('RSS feed fetch timeout')), 15000) // 15 second timeout
+    })
+
+    // Fetch TechCrunch RSS feed with timeout
+    const feedPromise = parser.parseURL("https://techcrunch.com/feed/")
+
+    const feed = await Promise.race([feedPromise, timeoutPromise]) as any
+    console.log("RSS feed fetched successfully, processing articles...")
 
     // Filter articles from the last N hours
     const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000)
@@ -50,12 +58,14 @@ export async function POST(request: NextRequest) {
       if (publishedAt < cutoffTime) continue
 
       // Check for duplicates before adding
+      console.log(`Checking duplicate for: ${item.title}`)
       try {
         const isDuplicate = await isDuplicateTechCrunchArticle(item.link)
         if (isDuplicate) {
           console.log(`Skipping duplicate article: ${item.title}`)
           continue
         }
+        console.log(`Article is not duplicate: ${item.title}`)
       } catch (error) {
         console.error(`Duplicate check failed for ${item.link}:`, error)
         // If duplicate check fails, still add the article to avoid missing content

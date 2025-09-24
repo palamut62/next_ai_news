@@ -89,10 +89,10 @@ export default function SettingsPage() {
 
   // Debouncing refs
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const lastUpdateRef = useRef<{ section: string; key: string; value: any } | null>(null)
+  const lastUpdateRef = useRef<{ section: string; key: string | number | symbol; value: any } | null>(null)
 
   // Debounced update function to prevent rapid successive updates
-  const updateSettings = useCallback((section: keyof Settings, key: string, value: any) => {
+  const updateSettings = useCallback(<K extends keyof Settings, SK extends keyof Settings[K]>(section: K, key: SK, value: Settings[K][SK]) => {
     // Clear any pending updates
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current)
@@ -117,22 +117,22 @@ export default function SettingsPage() {
         if (!prev) return prev
 
         // Only update if the value actually changed
-        if (prev[section][key] === value) {
+        if ((prev[section] as any)[key as any] === value) {
           return prev
         }
 
         return {
           ...prev,
           [section]: {
-            ...prev[section],
-            [key]: value,
+            ...(prev[section] as any),
+            [key as any]: value,
           },
         }
       })
     }, 100) // 100ms debounce delay
   }, [])
 
-  const updateNestedSettings = useCallback((section: keyof Settings, subsection: string, key: string, value: any) => {
+  const updateNestedSettings = useCallback(<K extends keyof Settings, SK extends keyof Settings[K], NSK extends string>(section: K, subsection: NSK, key: string, value: any) => {
     // Clear any pending updates
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current)
@@ -152,9 +152,9 @@ export default function SettingsPage() {
         return {
           ...prev,
           [section]: {
-            ...prev[section],
+            ...(prev[section] as any),
             [subsection]: {
-              ...(prev[section] as any)[subsection],
+              ...((prev[section] as any)[subsection] || {}),
               [key]: value,
             },
           },

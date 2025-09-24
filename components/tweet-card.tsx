@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { Tweet } from "@/lib/types"
-import { Check, X, ExternalLink, Star, GitFork, Calendar, TrendingUp } from "lucide-react"
+import { Check, X, ExternalLink, Star, GitFork, Calendar, TrendingUp, Share2 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
 interface TweetCardProps {
@@ -20,6 +20,23 @@ interface TweetCardProps {
 }
 
 export function TweetCard({ tweet, onApprove, onReject, onDelete, isSelected, onSelect, showSelection, approveDisabled }: TweetCardProps) {
+
+  // Function to open Twitter with pre-filled tweet content and source URL
+  const shareOnTwitter = () => {
+    const tweetText = tweet.content
+    const sourceUrl = tweet.sourceUrl
+
+    // Combine tweet content with source URL if it fits within character limit
+    let fullTweet = tweetText
+    if (sourceUrl && tweetText.length + sourceUrl.length + 1 <= 280) {
+      fullTweet = `${tweetText} ${sourceUrl}`
+    }
+
+    const encodedTweet = encodeURIComponent(fullTweet)
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodedTweet}`
+    window.open(twitterUrl, '_blank', 'width=600,height=400')
+  }
+
   const getSourceIcon = () => {
     switch (tweet.source) {
       case "github":
@@ -111,26 +128,38 @@ export function TweetCard({ tweet, onApprove, onReject, onDelete, isSelected, on
         )}
 
         {/* Actions */}
-        {tweet.status === "pending" && (
-          <div className="flex items-center gap-2 pt-2">
-            <Button size="sm" onClick={() => onApprove?.(tweet.id)} className="bg-green-600 hover:bg-green-700" disabled={approveDisabled}>
-              <Check className="h-4 w-4 mr-2" />
-              Approve
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onReject?.(tweet.id)}
-              className="border-red-500/20 text-red-500 hover:bg-red-500/10"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Reject
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2 pt-2">
+          {/* Manual Twitter Share Button - Always visible */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={shareOnTwitter}
+            className="border-blue-500/20 text-blue-500 hover:bg-blue-500/10"
+            title="Share manually on Twitter"
+          >
+            <Share2 className="h-4 w-4 mr-2" />
+            Share on Twitter
+          </Button>
 
-        {tweet.status === "rejected" && (
-          <div className="flex items-center gap-2 pt-2">
+          {tweet.status === "pending" && (
+            <>
+              <Button size="sm" onClick={() => onApprove?.(tweet.id)} className="bg-green-600 hover:bg-green-700" disabled={approveDisabled}>
+                <Check className="h-4 w-4 mr-2" />
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onReject?.(tweet.id)}
+                className="border-red-500/20 text-red-500 hover:bg-red-500/10"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Reject
+              </Button>
+            </>
+          )}
+
+          {tweet.status === "rejected" && (
             <Button
               size="sm"
               variant="outline"
@@ -140,8 +169,8 @@ export function TweetCard({ tweet, onApprove, onReject, onDelete, isSelected, on
               <X className="h-4 w-4 mr-2" />
               Delete
             </Button>
-          </div>
-        )}
+          )}
+        </div>
 
         {tweet.scheduledAt && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">

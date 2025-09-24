@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
   const limit = Number.parseInt(searchParams.get("limit") || "10")
 
   try {
-    // Return empty array since no mock data
+    // In a real app, this would fetch from GitHub API
+    // For now, returning an empty array as a placeholder
     return NextResponse.json([])
   } catch (error) {
     return NextResponse.json({ error: "Failed to fetch repositories" }, { status: 500 })

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
+import { isDuplicateGitHubRepository } from "@/lib/tweet-storage"
 
 interface GitHubRepo {
   id: string
@@ -11,36 +12,6 @@ interface GitHubRepo {
   language: string | null
   url: string
   updatedAt: string
-}
-
-// Check if repository was already posted
-async function isDuplicateRepository(repoUrl: string): Promise<boolean> {
-  try {
-    const fs = require('fs').promises
-    const path = require('path')
-    const postedTweetsPath = path.join(process.cwd(), 'data', 'posted-tweets.json')
-
-    try {
-      const postedTweetsData = await fs.readFile(postedTweetsPath, 'utf-8')
-      const postedTweets = JSON.parse(postedTweetsData)
-
-      // Check if any GitHub tweet has this repository URL
-      const isDuplicate = postedTweets.some((tweet: any) =>
-        tweet.source === 'github' && (
-          tweet.sourceUrl === repoUrl ||
-          tweet.sourceUrl?.toLowerCase() === repoUrl.toLowerCase()
-        )
-      )
-
-      return isDuplicate
-    } catch (error) {
-      // If file doesn't exist, no duplicates
-      return false
-    }
-  } catch (error) {
-    console.error('Duplicate check failed:', error)
-    return false
-  }
 }
 
 // Fetch trending repositories from GitHub
@@ -67,34 +38,28 @@ async function fetchTrendingRepos(): Promise<GitHubRepo[]> {
         const response = await fetch(endpoint, {
           headers: {
             'Accept': 'application/vnd.github.v3+json',
-            'User-Agent': 'AI-Tweet-Bot/1.0'
+            'User-Agent': 'AI-Tweet-Bot/1.0',
+            ...(process.env.GITHUB_TOKEN ? { Authorization: `token ${process.env.GITHUB_TOKEN}` } : {})
           }
         })
 
-        if (response.ok) {
-          const data = await response.json()
+        if (!response.ok) {
+          console.error(`GitHub API responded with ${response.status} ${response.statusText} for ${endpoint}`)
+          continue
+        }
 
-          for (const item of data.items) {
-            // Check for duplicates before adding
-            try {
-              const isDuplicate = await isDuplicateRepository(item.html_url)
+        const data = await response.json()
+        if (!data || !Array.isArray(data.items)) {
+          console.warn(`GitHub response for ${endpoint} did not contain items array`)
+          continue
+        }
 
-              if (!isDuplicate) {
-                trendingRepos.push({
-                  id: item.id.toString(),
-                  name: item.name,
-                  fullName: item.full_name,
-                  description: item.description || "No description available",
-                  stars: item.stargazers_count,
-                  forks: item.forks_count,
-                  language: item.language,
-                  url: item.html_url,
-                  updatedAt: item.updated_at
-                })
-              }
-            } catch (error) {
-              console.error(`Duplicate check failed for ${item.html_url}:`, error)
-              // If duplicate check fails, still add the repo to avoid missing content
+        for (const item of data.items) {
+          // Check for duplicates before adding
+          try {
+            const isDuplicate = await isDuplicateGitHubRepository(item.html_url)
+
+            if (!isDuplicate) {
               trendingRepos.push({
                 id: item.id.toString(),
                 name: item.name,
@@ -107,10 +72,24 @@ async function fetchTrendingRepos(): Promise<GitHubRepo[]> {
                 updatedAt: item.updated_at
               })
             }
+          } catch (err) {
+            console.error(`Duplicate check failed for ${item.html_url}:`, err)
+            // If duplicate check fails, still add the repo to avoid missing content
+            trendingRepos.push({
+              id: item.id.toString(),
+              name: item.name,
+              fullName: item.full_name,
+              description: item.description || "No description available",
+              stars: item.stargazers_count,
+              forks: item.forks_count,
+              language: item.language,
+              url: item.html_url,
+              updatedAt: item.updated_at
+            })
           }
         }
-      } catch (error) {
-        console.error(`Failed to fetch from ${endpoint}:`, error)
+      } catch (err) {
+        console.error(`Failed to fetch from ${endpoint}:`, err)
       }
     }
   } catch (error) {

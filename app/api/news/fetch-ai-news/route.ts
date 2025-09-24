@@ -75,38 +75,51 @@ export async function POST(request: NextRequest) {
       try {
         console.log("🔄 Trying TechCrunch RSS feed for recent AI news...")
         const techcrunchRSS = await fetch('https://techcrunch.com/category/artificial-intelligence/feed/')
-        const rssText = await techcrunchRSS.text()
+        if (!techcrunchRSS.ok) {
+          console.error(`TechCrunch RSS fetch failed: ${techcrunchRSS.status} ${techcrunchRSS.statusText}`)
+        } else {
+          const rssText = await techcrunchRSS.text()
 
-        // Parse RSS to get recent articles (last 24 hours)
-        const parser = new DOMParser()
-        const xmlDoc = parser.parseFromString(rssText, "text/xml")
-        const items = xmlDoc.getElementsByTagName('item')
+          // Simple and robust RSS parsing without relying on DOMParser (works in Node)
+          const itemBlocks = Array.from(rssText.matchAll(/<item[\s\S]*?<\/item>/g)).map(m => m[0])
 
-        const now = new Date()
-        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+          const now = new Date()
+          const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
 
-        for (let i = 0; i < Math.min(items.length, count); i++) {
-          const item = items[i]
-          const title = item.getElementsByTagName('title')[0]?.textContent || ''
-          const description = item.getElementsByTagName('description')[0]?.textContent || ''
-          const link = item.getElementsByTagName('link')[0]?.textContent || ''
-          const pubDate = item.getElementsByTagName('pubDate')[0]?.textContent || ''
+          for (let i = 0; i < Math.min(itemBlocks.length, count); i++) {
+            const itemText = itemBlocks[i]
 
-          // Check if article is from last 24 hours
-          const articleDate = new Date(pubDate)
-          if (articleDate >= twentyFourHoursAgo && title.toLowerCase().includes('ai')) {
-            articles.push({
-              title,
-              description: description.replace(/<[^>]*>/g, ''), // Remove HTML tags
-              url: link,
-              urlToImage: null,
-              publishedAt: articleDate.toISOString(),
-              source: { name: 'TechCrunch' }
-            })
+            const titleMatch = itemText.match(/<title>([\s\S]*?)<\/title>/i)
+            const descriptionMatch = itemText.match(/<description>([\s\S]*?)<\/description>/i)
+            const linkMatch = itemText.match(/<link>([\s\S]*?)<\/link>/i)
+            const pubDateMatch = itemText.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)
+
+            const title = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim() : ''
+            let description = descriptionMatch ? descriptionMatch[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim() : ''
+            const link = linkMatch ? linkMatch[1].trim() : ''
+            const pubDate = pubDateMatch ? pubDateMatch[1].trim() : ''
+
+            // Remove HTML tags from description
+            description = description.replace(/<[^>]*>/g, '').trim()
+
+            // Check if article is from last 24 hours
+            const articleDate = pubDate ? new Date(pubDate) : new Date()
+            if (isNaN(articleDate.getTime())) continue
+
+            if (articleDate >= twentyFourHoursAgo && title.toLowerCase().includes('ai')) {
+              articles.push({
+                title,
+                description,
+                url: link,
+                urlToImage: null,
+                publishedAt: articleDate.toISOString(),
+                source: { name: 'TechCrunch' }
+              })
+            }
           }
-        }
 
-        console.log(`✅ Found ${articles.length} recent AI articles from TechCrunch RSS`)
+          console.log(`✅ Found ${articles.length} recent AI articles from TechCrunch RSS`)
+        }
       } catch (rssError) {
         console.error("❌ TechCrunch RSS failed:", rssError)
         console.log("⚠️ No real AI news articles found in the last 24 hours")
