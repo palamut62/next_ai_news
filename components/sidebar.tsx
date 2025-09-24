@@ -5,12 +5,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Bot, Home, MessageSquare, Settings, BarChart3, Github, Bell, Menu, X, Plus } from "lucide-react"
+import { Bot, Home, MessageSquare, Settings, BarChart3, Github, Bell, Menu, X, Plus, Newspaper } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Home },
   { name: "Create Tweet", href: "/create", icon: Plus },
   { name: "Pending Tweets", href: "/tweets", icon: MessageSquare },
+  { name: "TechCrunch News", href: "/techcrunch", icon: Newspaper },
   { name: "Statistics", href: "/statistics", icon: BarChart3 },
   { name: "GitHub Repos", href: "/github", icon: Github },
   { name: "Settings", href: "/settings", icon: Settings },

@@ -105,6 +105,30 @@ class TweetStorage {
     }
   }
 
+  // Check if TechCrunch article was already posted
+  async isDuplicateTechCrunchArticle(articleUrl: string): Promise<boolean> {
+    try {
+      const postedTweets = await this.loadJsonFile<StoredTweet[]>(this.postedTweetsPath, [])
+      const deletedTweets = await this.loadJsonFile<StoredTweet[]>(this.deletedTweetsPath, [])
+
+      const allTweets = [...postedTweets, ...deletedTweets]
+
+      // Check if any TechCrunch tweet has this article URL
+      const isDuplicate = allTweets.some(tweet =>
+        tweet.source === 'techcrunch' && (
+          tweet.sourceUrl === articleUrl ||
+          tweet.sourceUrl?.toLowerCase() === articleUrl.toLowerCase()
+        )
+      )
+
+      return isDuplicate
+    } catch (error) {
+      console.error('TechCrunch duplicate check failed:', error)
+      // If duplicate check fails, assume it's not a duplicate to avoid missing content
+      return false
+    }
+  }
+
   // Check if article is duplicate based on title, URL, or content similarity
   async isDuplicateArticle(article: {
     title: string
@@ -401,4 +425,8 @@ export async function getRecentActivity(days?: number) {
 
 export async function isDuplicateGitHubRepository(repoUrl: string) {
   return await tweetStorage.isDuplicateGitHubRepository(repoUrl)
+}
+
+export async function isDuplicateTechCrunchArticle(articleUrl: string) {
+  return await tweetStorage.isDuplicateTechCrunchArticle(articleUrl)
 }

@@ -28,6 +28,19 @@ export interface Article {
   category: string
 }
 
+export interface TechCrunchArticle {
+  id: string
+  title: string
+  description: string
+  content: string
+  url: string
+  publishedAt: string
+  author: string
+  categories: string[]
+  imageUrl?: string
+  aiScore?: number
+}
+
 export interface GitHubRepo {
   id: string
   name: string
