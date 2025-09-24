@@ -54,6 +54,22 @@ async function fetchTrendingRepos(): Promise<GitHubRepo[]> {
       'User-Agent': 'AI-Tweet-Bot/1.0',
     }
 
+    const fetchOptions: RequestInit = { headers }
+
+    // fetch with timeout helper
+    async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeout = 20000) {
+      const controller = new AbortController()
+      const id = setTimeout(() => controller.abort(), timeout)
+      try {
+        const res = await fetch(url, { ...opts, signal: controller.signal })
+        clearTimeout(id)
+        return res
+      } catch (err) {
+        clearTimeout(id)
+        throw err
+      }
+    }
+
     // Temporarily disable authentication to test functionality
     // if (process.env.GITHUB_TOKEN) {
     //   headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`
@@ -63,20 +79,22 @@ async function fetchTrendingRepos(): Promise<GitHubRepo[]> {
     for (const strategy of strategies) {
       try {
         // If this strategy provides multiple endpoints, iterate them safely
-        if (Array.isArray((strategy as any).endpoints)) {
+          if (Array.isArray((strategy as any).endpoints)) {
           // Dil bazlı arama için
           for (const endpoint of (strategy as any).endpoints) {
             try {
               console.log(`📡 Fetching from ${endpoint.split('?q=')[1].split('&')[0]}`)
-
-              const response = await fetch(endpoint, { headers })
+              const response = await fetchWithTimeout(endpoint, fetchOptions, 20000)
+              const text = await response.text()
 
               if (!response.ok) {
-                console.warn(`❌ Failed to fetch from ${endpoint}: ${response.status}`)
+                console.warn(`❌ Failed to fetch from ${endpoint}: ${response.status} ${response.statusText}`)
+                console.warn('Response body (first 1000 chars):', text.slice(0, 1000))
                 continue
               }
 
-              const data = await response.json()
+              let data: any = {}
+              try { data = JSON.parse(text) } catch { data = {} }
 
               if (!data.items || !Array.isArray(data.items)) {
                 console.warn(`❌ No items in response for ${endpoint}`)
@@ -105,7 +123,7 @@ async function fetchTrendingRepos(): Promise<GitHubRepo[]> {
               console.error(`❌ Error fetching from ${endpoint}:`, err)
             }
           }
-        } else {
+          } else {
           // Normal endpointler için
           console.log(`📡 Fetching ${strategy.name}: ${strategy.description}`)
 
@@ -113,15 +131,17 @@ async function fetchTrendingRepos(): Promise<GitHubRepo[]> {
             console.warn(`⚠️ Strategy ${strategy.name} has no endpoint, skipping`)
             continue
           }
-
-          const response = await fetch(strategy.endpoint, { headers })
+          const response = await fetchWithTimeout(strategy.endpoint, fetchOptions, 20000)
+          const text = await response.text()
 
           if (!response.ok) {
             console.warn(`❌ Failed to fetch ${strategy.name}: ${response.status} ${response.statusText}`)
+            console.warn('Response body (first 1000 chars):', text.slice(0, 1000))
             continue
           }
 
-          const data = await response.json()
+          let data: any = {}
+          try { data = JSON.parse(text) } catch { data = {} }
 
           if (!data.items || !Array.isArray(data.items)) {
             console.warn(`❌ No items in response for ${strategy.name}`)

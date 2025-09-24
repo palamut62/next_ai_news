@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const { count = 10 } = await request.json()
 
     // Step 1: Fetch AI news articles
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'http://localhost:3000')
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://ai-news-tweet-app.vercel.app'
     const fetchResponse = await fetch(`${baseUrl}/api/news/fetch-ai-news`, {
       method: 'POST',
       headers: {

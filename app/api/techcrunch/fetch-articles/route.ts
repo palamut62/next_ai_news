@@ -33,16 +33,20 @@ export async function POST(request: NextRequest) {
 
     console.log("Fetching TechCrunch RSS feed...")
 
-    // Add timeout protection
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('RSS feed fetch timeout')), 15000) // 15 second timeout
-    })
+    // Small fetch-with-timeout wrapper using parser.parseURL in a race
+    async function fetchWithTimeout<T>(fetchFn: Promise<T>, timeout = 15000): Promise<T> {
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('RSS feed fetch timeout')), timeout))
+      return Promise.race([fetchFn, timeoutPromise]) as Promise<T>
+    }
 
-    // Fetch TechCrunch RSS feed with timeout
-    const feedPromise = parser.parseURL("https://techcrunch.com/feed/")
-
-    const feed = await Promise.race([feedPromise, timeoutPromise]) as any
-    console.log("RSS feed fetched successfully, processing articles...")
+    let feed: any
+    try {
+      feed = await fetchWithTimeout(parser.parseURL("https://techcrunch.com/feed/"), 15000)
+      console.log("RSS feed fetched successfully, processing articles...")
+    } catch (err) {
+      console.error("❌ TechCrunch parser.parseURL failed:", err)
+      throw err
+    }
 
     // Filter articles from the last N hours
     const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000)

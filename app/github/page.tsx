@@ -58,7 +58,7 @@ export default function GitHubPage() {
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/github/fetch-repos`, {
+      const response = await fetch(`/api/github/fetch-repos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -105,7 +105,7 @@ export default function GitHubPage() {
   const handleGenerateTweet = async (repo: GitHubRepo) => {
     setGeneratingTweets((prev) => new Set(prev).add(repo.id))
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/tweets/generate-from-github`, {
+      const response = await fetch(`/api/tweets/generate-from-github`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -116,9 +116,10 @@ export default function GitHubPage() {
 
       if (response.ok) {
         // Save the generated tweet to pending list
-        const saveResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/tweets/save`, {
+        const saveResponse = await fetch(`/api/tweets/save`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             content: data.tweet,
             source: "github",

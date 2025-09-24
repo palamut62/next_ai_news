@@ -49,9 +49,10 @@ export default function TechCrunchPage() {
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/techcrunch/fetch-articles`, {
+      const response = await fetch(`/api/techcrunch/fetch-articles`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({
           hours: parseInt(timeRange)
         })
@@ -92,9 +93,10 @@ export default function TechCrunchPage() {
   const handleGenerateTweet = async (article: TechCrunchArticle) => {
     setGeneratingTweets((prev) => new Set(prev).add(article.id))
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/tweets/generate-from-techcrunch`, {
+      const response = await fetch(`/api/tweets/generate-from-techcrunch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({ article })
       })
 
@@ -102,9 +104,10 @@ export default function TechCrunchPage() {
 
       if (response.ok) {
         // Save the generated tweet to pending list
-        const saveResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/tweets/save`, {
+        const saveResponse = await fetch(`/api/tweets/save`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: 'include',
           body: JSON.stringify({
             content: data.tweet,
             source: "techcrunch",

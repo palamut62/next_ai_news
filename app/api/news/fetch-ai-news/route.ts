@@ -2,6 +2,20 @@ import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { isDuplicateArticle } from "@/lib/tweet-storage"
 
+// Simple fetch with timeout helper
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeout = 20000) {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeout)
+  try {
+    const res = await fetch(url, { ...opts, signal: controller.signal })
+    clearTimeout(id)
+    return res
+  } catch (err) {
+    clearTimeout(id)
+    throw err
+  }
+}
+
 interface NewsArticle {
   title: string
   description: string
@@ -48,16 +62,21 @@ export async function POST(request: NextRequest) {
         const newsApiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQuery)}&language=en&sortBy=publishedAt&from=${testFromDate.toISOString().split('T')[0]}&to=${toDate}&pageSize=${count}&apiKey=${process.env.NEWS_API_KEY}`
 
         console.log(`📰 Fetching real AI news from: ${newsApiUrl}`)
+        try {
+          const response = await fetchWithTimeout(newsApiUrl, {}, 20000)
+          const text = await response.text()
+          let data: any = {}
+          try { data = JSON.parse(text) } catch { /* ignore non-json */ }
 
-        const response = await fetch(newsApiUrl)
-        const data = await response.json()
-
-        if (response.ok && data.articles && data.articles.length > 0) {
-          articles = data.articles.slice(0, count)
-          console.log(`✅ Successfully fetched ${articles.length} real AI news articles`)
-        } else {
-          console.error(`❌ NewsAPI error: ${data.message || 'Unknown error'}`)
-          console.error(`❌ NewsAPI response:`, data)
+          if (response.ok && data.articles && data.articles.length > 0) {
+            articles = data.articles.slice(0, count)
+            console.log(`✅ Successfully fetched ${articles.length} real AI news articles`)
+          } else {
+            console.error(`❌ NewsAPI response status: ${response.status} ${response.statusText}`)
+            console.error('❌ NewsAPI body (first 1000 chars):', text.slice(0, 1000))
+          }
+        } catch (newsApiError) {
+          console.error("❌ NewsAPI failed:", newsApiError)
         }
       } catch (newsApiError) {
         console.error("❌ NewsAPI failed:", newsApiError)
@@ -75,52 +94,49 @@ export async function POST(request: NextRequest) {
     if (articles.length === 0) {
       try {
         console.log("🔄 Trying TechCrunch RSS feed for recent AI news...")
-        const techcrunchRSS = await fetch('https://techcrunch.com/category/artificial-intelligence/feed/')
-        if (!techcrunchRSS.ok) {
-          console.error(`TechCrunch RSS fetch failed: ${techcrunchRSS.status} ${techcrunchRSS.statusText}`)
-        } else {
-          const rssText = await techcrunchRSS.text()
+        const rssUrl = 'https://techcrunch.com/category/artificial-intelligence/feed/'
+        const techcrunchRSS = await fetchWithTimeout(rssUrl, {}, 25000)
+        const rssText = await techcrunchRSS.text()
 
-          // Simple and robust RSS parsing without relying on DOMParser (works in Node)
-          const itemBlocks = Array.from(rssText.matchAll(/<item[\s\S]*?<\/item>/g)).map(m => m[0])
+        // Simple and robust RSS parsing without relying on DOMParser (works in Node)
+        const itemBlocks = Array.from(rssText.matchAll(/<item[\s\S]*?<\/item>/g)).map(m => m[0])
 
-          const now = new Date()
-          const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+        const now = new Date()
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
 
-          for (let i = 0; i < Math.min(itemBlocks.length, count); i++) {
-            const itemText = itemBlocks[i]
+        for (let i = 0; i < Math.min(itemBlocks.length, count); i++) {
+          const itemText = itemBlocks[i]
 
-            const titleMatch = itemText.match(/<title>([\s\S]*?)<\/title>/i)
-            const descriptionMatch = itemText.match(/<description>([\s\S]*?)<\/description>/i)
-            const linkMatch = itemText.match(/<link>([\s\S]*?)<\/link>/i)
-            const pubDateMatch = itemText.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)
+          const titleMatch = itemText.match(/<title>([\s\S]*?)<\/title>/i)
+          const descriptionMatch = itemText.match(/<description>([\s\S]*?)<\/description>/i)
+          const linkMatch = itemText.match(/<link>([\s\S]*?)<\/link>/i)
+          const pubDateMatch = itemText.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)
 
-            const title = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim() : ''
-            let description = descriptionMatch ? descriptionMatch[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim() : ''
-            const link = linkMatch ? linkMatch[1].trim() : ''
-            const pubDate = pubDateMatch ? pubDateMatch[1].trim() : ''
+          const title = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim() : ''
+          let description = descriptionMatch ? descriptionMatch[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim() : ''
+          const link = linkMatch ? linkMatch[1].trim() : ''
+          const pubDate = pubDateMatch ? pubDateMatch[1].trim() : ''
 
-            // Remove HTML tags from description
-            description = description.replace(/<[^>]*>/g, '').trim()
+          // Remove HTML tags from description
+          description = description.replace(/<[^>]*>/g, '').trim()
 
-            // Check if article is from last 24 hours
-            const articleDate = pubDate ? new Date(pubDate) : new Date()
-            if (isNaN(articleDate.getTime())) continue
+          // Check if article is from last 24 hours
+          const articleDate = pubDate ? new Date(pubDate) : new Date()
+          if (isNaN(articleDate.getTime())) continue
 
-            if (articleDate >= twentyFourHoursAgo && title.toLowerCase().includes('ai')) {
-              articles.push({
-                title,
-                description,
-                url: link,
-                urlToImage: null,
-                publishedAt: articleDate.toISOString(),
-                source: { name: 'TechCrunch' }
-              })
-            }
+          if (articleDate >= twentyFourHoursAgo && title.toLowerCase().includes('ai')) {
+            articles.push({
+              title,
+              description,
+              url: link,
+              urlToImage: null,
+              publishedAt: articleDate.toISOString(),
+              source: { name: 'TechCrunch' }
+            })
           }
-
-          console.log(`✅ Found ${articles.length} recent AI articles from TechCrunch RSS`)
         }
+
+        console.log(`✅ Found ${articles.length} recent AI articles from TechCrunch RSS`)
       } catch (rssError) {
         console.error("❌ TechCrunch RSS failed:", rssError)
         console.log("⚠️ No real AI news articles found in the last 24 hours")
