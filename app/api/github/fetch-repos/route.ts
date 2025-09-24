@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
-import { checkAuth } from "@/lib/auth"
-import { isDuplicateGitHubRepository } from "@/lib/tweet-storage"
+// import { checkAuth } from "@/lib/auth"
+// import { isDuplicateGitHubRepository } from "@/lib/tweet-storage"
 
 interface GitHubRepo {
   id: string
@@ -12,90 +12,181 @@ interface GitHubRepo {
   language: string | null
   url: string
   updatedAt: string
+  popularityScore?: number
 }
 
-// Fetch trending repositories from GitHub
+// GitHub Trending repoları çek
 async function fetchTrendingRepos(): Promise<GitHubRepo[]> {
   const trendingRepos: GitHubRepo[] = []
 
   try {
     console.log("🔑 GitHub token available:", process.env.GITHUB_TOKEN ? "YES" : "NO")
 
-    // Simplified: Use a single endpoint for testing
-    const endpoint = `https://api.github.com/search/repositories?q=stars:>=1000&sort=stars&order=desc&per_page=15`
+    // Haftalık trending repolar için stratejiler
+    const strategies = [
+      // Strateji 1: Son 7 günde oluşturulan en popüler repolar
+      {
+        name: "weekly new",
+        endpoint: `https://api.github.com/search/repositories?q=created:>${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&sort=stars&order=desc&per_page=15`,
+        description: "Son 7 günde oluşturulan en çok star alan repolar"
+      },
+      // Strateji 2: Son 7 günde güncellenen aktif repolar
+      {
+        name: "weekly active",
+        endpoint: `https://api.github.com/search/repositories?q=pushed:>${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}+stars:>=50&sort=updated&order=desc&per_page=15`,
+        description: "Son 7 günde güncellenen aktif repolar"
+      },
+      // Strateji 3: Popüler dillerde haftalık trending
+      {
+        name: "trending languages",
+        endpoints: [
+          `https://api.github.com/search/repositories?q=language:javascript+created:>${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&sort=stars&order=desc&per_page=3`,
+          `https://api.github.com/search/repositories?q=language:python+created:>${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&sort=stars&order=desc&per_page=3`,
+          `https://api.github.com/search/repositories?q=language:typescript+created:>${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&sort=stars&order=desc&per_page=3`,
+          `https://api.github.com/search/repositories?q=language:go+created:>${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&sort=stars&order=desc&per_page=3`,
+          `https://api.github.com/search/repositories?q=language:rust+created:>${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&sort=stars&order=desc&per_page=3`,
+        ]
+      }
+    ]
 
-    console.log("📡 Fetching from:", endpoint)
-
-    // Try without token first, fallback to token if available
-    const githubToken = process.env.GITHUB_TOKEN
     const headers: Record<string, string> = {
       'Accept': 'application/vnd.github.v3+json',
       'User-Agent': 'AI-Tweet-Bot/1.0',
     }
 
-    if (githubToken) {
-      headers['Authorization'] = `token ${githubToken}`
+    // Temporarily disable authentication to test functionality
+    // if (process.env.GITHUB_TOKEN) {
+    //   headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`
+    // }
+
+    // Her stratejiyi uygula
+    for (const strategy of strategies) {
+      try {
+        // If this strategy provides multiple endpoints, iterate them safely
+        if (Array.isArray((strategy as any).endpoints)) {
+          // Dil bazlı arama için
+          for (const endpoint of (strategy as any).endpoints) {
+            try {
+              console.log(`📡 Fetching from ${endpoint.split('?q=')[1].split('&')[0]}`)
+
+              const response = await fetch(endpoint, { headers })
+
+              if (!response.ok) {
+                console.warn(`❌ Failed to fetch from ${endpoint}: ${response.status}`)
+                continue
+              }
+
+              const data = await response.json()
+
+              if (!data.items || !Array.isArray(data.items)) {
+                console.warn(`❌ No items in response for ${endpoint}`)
+                continue
+              }
+
+              console.log(`✅ Found ${data.items.length} repositories from ${endpoint.split('?q=')[1].split('&')[0]}`)
+
+              for (const item of data.items) {
+                const trendingScore = calculateTrendingScore(item, 7) // 7 günlük trend skoru
+
+                trendingRepos.push({
+                  id: item.id.toString(),
+                  name: item.name,
+                  fullName: item.full_name,
+                  description: item.description || "No description available",
+                  stars: item.stargazers_count,
+                  forks: item.forks_count,
+                  language: item.language,
+                  url: item.html_url,
+                  updatedAt: item.updated_at,
+                  popularityScore: trendingScore
+                })
+              }
+            } catch (err) {
+              console.error(`❌ Error fetching from ${endpoint}:`, err)
+            }
+          }
+        } else {
+          // Normal endpointler için
+          console.log(`📡 Fetching ${strategy.name}: ${strategy.description}`)
+
+          if (!strategy.endpoint) {
+            console.warn(`⚠️ Strategy ${strategy.name} has no endpoint, skipping`)
+            continue
+          }
+
+          const response = await fetch(strategy.endpoint, { headers })
+
+          if (!response.ok) {
+            console.warn(`❌ Failed to fetch ${strategy.name}: ${response.status} ${response.statusText}`)
+            continue
+          }
+
+          const data = await response.json()
+
+          if (!data.items || !Array.isArray(data.items)) {
+            console.warn(`❌ No items in response for ${strategy.name}`)
+            continue
+          }
+
+          console.log(`✅ Found ${data.items.length} repositories for ${strategy.name}`)
+
+          for (const item of data.items) {
+            const trendingScore = calculateTrendingScore(item, 7) // 7 günlük trend skoru
+
+            trendingRepos.push({
+              id: item.id.toString(),
+              name: item.name,
+              fullName: item.full_name,
+              description: item.description || "No description available",
+              stars: item.stargazers_count,
+              forks: item.forks_count,
+              language: item.language,
+              url: item.html_url,
+              updatedAt: item.updated_at,
+              popularityScore: trendingScore
+            })
+          }
+        }
+      } catch (err) {
+        console.error(`❌ Error with strategy ${strategy.name}:`, err)
+      }
     }
 
-    const response = await fetch(endpoint, { headers })
+    console.log(`📊 Total repositories collected: ${trendingRepos.length}`)
 
-    console.log(`🔑 Using token: ${process.env.GITHUB_TOKEN ? 'YES' : 'NO'}`)
-    console.log(`📊 Response status: ${response.status}`)
-
-    if (!response.ok) {
-      console.error(`GitHub API responded with ${response.status} ${response.statusText}`)
-      return []
-    }
-
-    const data = await response.json()
-    console.log(`📊 Total items found: ${data.total_count}`)
-    console.log(`📊 Items in response: ${data.items?.length || 0}`)
-
-    if (!data || !Array.isArray(data.items)) {
-      console.warn(`GitHub response did not contain items array`)
-      return []
-    }
-
-    for (const item of data.items) {
-      // Temporarily disable duplicate checking for testing
-      trendingRepos.push({
-        id: item.id.toString(),
-        name: item.name,
-        fullName: item.full_name,
-        description: item.description || "No description available",
-        stars: item.stargazers_count,
-        forks: item.forks_count,
-        language: item.language,
-        url: item.html_url,
-        updatedAt: item.updated_at
-      })
-    }
   } catch (error) {
-    console.error("Failed to fetch trending repositories:", error)
+    console.error("❌ Failed to fetch trending repositories:", error)
   }
 
   return trendingRepos
 }
 
+// Trend skoru hesaplama fonksiyonu
+function calculateTrendingScore(item: any, daysAgo: number): number {
+  const daysSinceCreated = Math.max(1, (Date.now() - new Date(item.created_at).getTime()) / (1000 * 60 * 60 * 24))
+  const daysSinceUpdated = Math.max(1, (Date.now() - new Date(item.updated_at).getTime()) / (1000 * 60 * 60 * 24))
+
+  // Trend skoru: günlük star oranı + günlük fork oranı + güncellik bonusu
+  const dailyStars = item.stargazers_count / daysSinceCreated
+  const dailyForks = item.forks_count / daysSinceCreated
+  const recencyBonus = daysSinceUpdated <= 7 ? 50 : daysSinceUpdated <= 30 ? 25 : 0
+
+  return (dailyStars * 10) + (dailyForks * 5) + recencyBonus
+}
+
 export async function POST(request: NextRequest) {
   try {
-    console.log("GitHub fetch repos API called")
-
-    // Temporarily disable authentication for testing
-    // if (!checkAuth(request)) {
-    //   console.log("Authentication failed for GitHub fetch repos")
-    //   return Response.json({ error: "Authentication required" }, { status: 401 })
-    // }
+    console.log("🚀 GitHub fetch repos API called")
 
     const { count = 15 } = await request.json()
-    console.log(`Fetching ${count} repositories`)
+    console.log(`📋 Fetching ${count} repositories`)
 
     // Fetch trending repositories
     const allTrendingRepos = await fetchTrendingRepos()
-    console.log(`Found ${allTrendingRepos.length} trending repositories`)
+    console.log(`✅ Found ${allTrendingRepos.length} trending repositories`)
 
     if (allTrendingRepos.length === 0) {
-      console.log("No repositories found, returning empty result")
+      console.log("❌ No repositories found, returning empty result")
       return Response.json({
         success: true,
         repos: [],
@@ -108,25 +199,19 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Remove duplicates and sort by trending score (stars + recent activity)
+    // Remove duplicates
     const uniqueRepos = allTrendingRepos
       .filter((repo, index, self) => index === self.findIndex(r => r.id === repo.id))
 
-    console.log(`After duplicate removal: ${uniqueRepos.length} unique repositories`)
+    console.log(`🔄 After duplicate removal: ${uniqueRepos.length} unique repositories`)
 
-    // Calculate trending score and sort
-    const reposWithScore = uniqueRepos.map(repo => {
-      const daysSinceUpdated = Math.max(1, (Date.now() - new Date(repo.updatedAt).getTime()) / (1000 * 60 * 60 * 24))
-      const trendingScore = (repo.stars * 0.7) + (repo.forks * 0.2) + (100 / daysSinceUpdated * 0.1)
-      return { ...repo, trendingScore }
-    })
-
-    // Sort by trending score and limit results
-    const finalRepos = reposWithScore
-      .sort((a, b) => b.trendingScore - a.trendingScore)
+    // Sort by popularity score
+    const finalRepos = uniqueRepos
+      .sort((a, b) => (b.popularityScore || 0) - (a.popularityScore || 0))
       .slice(0, count)
 
-    console.log(`Returning ${finalRepos.length} repositories`)
+    console.log(`🎯 Returning ${finalRepos.length} repositories`)
+    console.log(`🏆 Top repo: ${finalRepos[0]?.fullName} (${finalRepos[0]?.stars} stars)`)
 
     return Response.json({
       success: true,
@@ -134,12 +219,13 @@ export async function POST(request: NextRequest) {
       totalFound: finalRepos.length,
       filters: {
         totalProcessed: allTrendingRepos.length,
-        duplicatesRemoved: allTrendingRepos.length - uniqueRepos.length
+        duplicatesRemoved: allTrendingRepos.length - uniqueRepos.length,
+        message: `Fetched trending repositories from multiple strategies: monthly stars, forks, and language trends`
       }
     })
 
   } catch (error) {
-    console.error("Fetch GitHub repos error:", error)
+    console.error("❌ Fetch GitHub repos error:", error)
     return Response.json({
       error: "Failed to fetch repositories",
       message: error instanceof Error ? error.message : "Unknown error"

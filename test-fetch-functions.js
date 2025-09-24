@@ -5,7 +5,7 @@ async function testFetchFunctions() {
   try {
     // Test TechCrunch articles fetch
     console.log('\n1. Testing TechCrunch articles fetch...');
-    const techCrunchResponse = await fetch('http://localhost:3000/api/techcrunch/fetch-articles', {
+    const techCrunchResponse = await fetch('http://localhost:3003/api/techcrunch/fetch-articles', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -22,7 +22,7 @@ async function testFetchFunctions() {
     // Test GitHub repos fetch
     console.log('\n2. Testing GitHub repos fetch...');
     // Note: This will likely fail without proper authentication
-    const githubResponse = await fetch('http://localhost:3000/api/github/fetch-repos', {
+    const githubResponse = await fetch('http://localhost:3003/api/github/fetch-repos', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
