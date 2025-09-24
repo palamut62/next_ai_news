@@ -1,0 +1,196 @@
+import type { NextRequest } from "next/server"
+import { checkAuth } from "@/lib/auth"
+import { isDuplicateArticle } from "@/lib/tweet-storage"
+
+interface NewsArticle {
+  title: string
+  description: string
+  url: string
+  urlToImage: string | null
+  publishedAt: string
+  source: {
+    name: string
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    if (!checkAuth(request)) {
+      return Response.json({ error: "Authentication required" }, { status: 401 })
+    }
+
+    const { count = 10 } = await request.json()
+
+    // Get today's date for filtering recent AI news
+    const today = new Date()
+    const oneMonthAgo = new Date(today)
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30)
+
+    // NewsAPI requires specific date format and valid range
+    const fromDate = oneMonthAgo.toISOString().split('T')[0]
+    const toDate = today.toISOString().split('T')[0]
+
+    console.log(`📅 Date range: ${fromDate} to ${toDate}`)
+
+    let articles: NewsArticle[] = []
+
+    // Try NewsAPI first - use the real API key from .env
+    if (process.env.NEWS_API_KEY) {
+      try {
+        // Enhanced AI-related search terms for better news coverage
+        const searchQuery = "artificial intelligence OR AI OR machine learning OR deep learning OR neural networks OR ChatGPT OR OpenAI OR Google AI OR Microsoft AI OR Meta AI OR Anthropic OR GPT OR LLM OR large language model OR generative AI OR automation OR robotics OR computer vision OR natural language processing"
+
+        // Test with a shorter date range first to avoid API limitations
+        const testFromDate = new Date(today)
+        testFromDate.setDate(testFromDate.getDate() - 7) // Last 7 days only
+
+        const newsApiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQuery)}&language=en&sortBy=publishedAt&from=${testFromDate.toISOString().split('T')[0]}&to=${toDate}&pageSize=${count}&apiKey=${process.env.NEWS_API_KEY}`
+
+        console.log(`📰 Fetching real AI news from: ${newsApiUrl}`)
+
+        const response = await fetch(newsApiUrl)
+        const data = await response.json()
+
+        if (response.ok && data.articles && data.articles.length > 0) {
+          articles = data.articles.slice(0, count)
+          console.log(`✅ Successfully fetched ${articles.length} real AI news articles`)
+        } else {
+          console.error(`❌ NewsAPI error: ${data.message || 'Unknown error'}`)
+          console.error(`❌ NewsAPI response:`, data)
+        }
+      } catch (newsApiError) {
+        console.error("❌ NewsAPI failed:", newsApiError)
+      }
+    } else {
+      console.error("❌ NEWS_API_KEY not found in environment variables")
+      return Response.json({
+        success: false,
+        error: "NEWS_API_KEY not configured",
+        message: "Please add NEWS_API_KEY to your environment variables"
+      }, { status: 500 })
+    }
+
+    // If no real articles found from API, try TechCrunch RSS feed for recent AI news
+    if (articles.length === 0) {
+      try {
+        console.log("🔄 Trying TechCrunch RSS feed for recent AI news...")
+        const techcrunchRSS = await fetch('https://techcrunch.com/category/artificial-intelligence/feed/')
+        const rssText = await techcrunchRSS.text()
+
+        // Parse RSS to get recent articles (last 24 hours)
+        const parser = new DOMParser()
+        const xmlDoc = parser.parseFromString(rssText, "text/xml")
+        const items = xmlDoc.getElementsByTagName('item')
+
+        const now = new Date()
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+        for (let i = 0; i < Math.min(items.length, count); i++) {
+          const item = items[i]
+          const title = item.getElementsByTagName('title')[0]?.textContent || ''
+          const description = item.getElementsByTagName('description')[0]?.textContent || ''
+          const link = item.getElementsByTagName('link')[0]?.textContent || ''
+          const pubDate = item.getElementsByTagName('pubDate')[0]?.textContent || ''
+
+          // Check if article is from last 24 hours
+          const articleDate = new Date(pubDate)
+          if (articleDate >= twentyFourHoursAgo && title.toLowerCase().includes('ai')) {
+            articles.push({
+              title,
+              description: description.replace(/<[^>]*>/g, ''), // Remove HTML tags
+              url: link,
+              urlToImage: null,
+              publishedAt: articleDate.toISOString(),
+              source: { name: 'TechCrunch' }
+            })
+          }
+        }
+
+        console.log(`✅ Found ${articles.length} recent AI articles from TechCrunch RSS`)
+      } catch (rssError) {
+        console.error("❌ TechCrunch RSS failed:", rssError)
+        console.log("⚠️ No real AI news articles found in the last 24 hours")
+        return Response.json({
+          success: true,
+          articles: [],
+          count: 0,
+          fetchedAt: new Date().toISOString(),
+          isRealData: true,
+          message: "No AI news articles found in the last 24 hours (NewsAPI limitation: requires paid plan for recent articles)"
+        })
+      }
+    }
+
+    // Enhanced filtering for quality AI news articles with duplicate detection
+    const filteredArticles = []
+    let duplicatesCount = 0
+
+    for (const article of articles) {
+      // Basic content validation
+      if (!article.title || !article.description) continue
+      if (article.title.length < 15 || article.description.length < 30) continue
+
+      // Filter out unwanted content types
+      const title = article.title.toLowerCase()
+      const description = article.description.toLowerCase()
+
+      // Exclude non-AI content
+      const excludeKeywords = [
+        'weather', 'sports', 'football', 'basketball', 'cricket', 'tennis',
+        'stock market', 'cryptocurrency', 'bitcoin', 'election', 'politics',
+        'recipe', 'cooking', 'travel', 'fashion', 'celebrity', 'movie',
+        'music album', 'game review', 'iphone release', 'samsung galaxy'
+      ]
+
+      const hasExcludedKeyword = excludeKeywords.some(keyword =>
+        title.includes(keyword) || description.includes(keyword)
+      )
+
+      if (hasExcludedKeyword) continue
+
+      // Prioritize AI-related content
+      const aiKeywords = [
+        'artificial intelligence', 'ai', 'machine learning', 'deep learning',
+        'neural network', 'chatgpt', 'openai', 'gpt', 'llm', 'large language model',
+        'generative ai', 'automation', 'robotics', 'computer vision', 'nlp',
+        'natural language processing', 'anthropic', 'claude', 'gemini', 'bard',
+        'meta ai', 'microsoft ai', 'automation', 'algorithm', 'predictive'
+      ]
+
+      const hasAIKeyword = aiKeywords.some(keyword =>
+        title.includes(keyword) || description.includes(keyword)
+      )
+
+      if (!hasAIKeyword) continue
+
+      // Check for duplicates
+      const duplicateCheck = await isDuplicateArticle({
+        title: article.title,
+        url: article.url,
+        description: article.description
+      })
+
+      if (duplicateCheck.isDuplicate) {
+        duplicatesCount++
+        console.log(`🔄 Duplicate detected: "${article.title.substring(0, 50)}..." (${duplicateCheck.reason})`)
+        continue
+      }
+
+      filteredArticles.push(article)
+    }
+
+    console.log(`📊 Filtered ${articles.length} articles down to ${filteredArticles.length} unique articles (duplicates skipped: ${duplicatesCount})`)
+
+    return Response.json({
+      success: true,
+      articles: filteredArticles,
+      count: filteredArticles.length,
+      fetchedAt: new Date().toISOString(),
+      isRealData: process.env.NEWS_API_KEY ? true : false
+    })
+
+  } catch (error) {
+    console.error("Fetch AI news error:", error)
+    return Response.json({ error: "Failed to fetch AI news" }, { status: 500 })
+  }
+}
