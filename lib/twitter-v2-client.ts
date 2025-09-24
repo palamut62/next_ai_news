@@ -11,8 +11,13 @@ export async function postTextTweetV2(tweetText: string, sourceUrl?: string) {
   const hashtags = generateHashtags(text, 4)
   const hashtagsSuffix = hashtags.length ? '\n' + hashtags.join(' ') : ''
 
-  // Append source URL if provided, respecting 280-char limit
-  const sourceSuffix = sourceUrl && sourceUrl.trim() ? `\nSource: ${sourceUrl.trim()}` : ''
+  // Prepare source URL suffix (bare URL). Only append if the content doesn't already include it.
+  const rawUrl = sourceUrl && sourceUrl.trim() ? sourceUrl.trim() : ''
+  let sourceSuffix = ''
+  if (rawUrl && !text.includes(rawUrl)) {
+    sourceSuffix = '\n' + rawUrl
+  }
+
   const maxLen = 280
 
   // Reserve space for sourceSuffix and hashtagsSuffix and ellipsis

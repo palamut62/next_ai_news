@@ -59,19 +59,26 @@ class TwitterClient {
     })
   }
 
-  async postTweet(content: string): Promise<{ success: boolean; tweetId?: string; error?: string }> {
+  async postTweet(content: string, sourceUrl?: string): Promise<{ success: boolean; tweetId?: string; error?: string }> {
     try {
       // Generate hashtags and append to content if there is space
       const hashtags = generateHashtags(content, 4)
       const hashtagsSuffix = hashtags.length ? '\n' + hashtags.join(' ') : ''
+      const rawUrl = sourceUrl && sourceUrl.trim() ? sourceUrl.trim() : ''
+      let sourceSuffix = ''
+      if (rawUrl && !content.includes(rawUrl)) {
+        sourceSuffix = '\n' + rawUrl
+      }
+
       const maxLen = 280
       let bodyText = content
-      if (bodyText.length + hashtagsSuffix.length > maxLen) {
-        // truncate lightly to fit hashtags
-        const allowed = maxLen - hashtagsSuffix.length - 3
+      const reserved = sourceSuffix.length + hashtagsSuffix.length
+      if (bodyText.length + reserved > maxLen) {
+        // truncate lightly to fit hashtags and source URL
+        const allowed = maxLen - reserved - 3
         bodyText = bodyText.slice(0, Math.max(0, allowed)) + '...'
       }
-      bodyText = bodyText + hashtagsSuffix
+      bodyText = bodyText + sourceSuffix + hashtagsSuffix
 
       const response = await fetch("https://api.twitter.com/2/tweets", {
         method: "POST",
@@ -200,13 +207,13 @@ export function createTwitterClient(): TwitterClient {
   return new TwitterClient()
 }
 
-export async function postTweetToTwitter(content: string): Promise<{
+export async function postTweetToTwitter(content: string, sourceUrl?: string): Promise<{
   success: boolean
   tweetId?: string
   error?: string
 }> {
   const client = createTwitterClient()
-  return await client.postTweet(content)
+  return await client.postTweet(content, sourceUrl)
 }
 
 export async function updateTweetEngagement(tweetId: string): Promise<{

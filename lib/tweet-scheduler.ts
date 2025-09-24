@@ -86,7 +86,7 @@ class TweetScheduler {
     try {
       console.log(`Posting scheduled tweet ${tweet.id}: ${tweet.content.substring(0, 50)}...`)
 
-      const result = await postTweetToTwitter(tweet.content)
+  const result = await postTweetToTwitter(tweet.content, tweet.sourceUrl)
 
       if (result.success) {
         console.log(`Successfully posted scheduled tweet ${tweet.id} with Twitter ID: ${result.tweetId}`)
@@ -147,7 +147,7 @@ class TweetScheduler {
 
     for (const tweet of tweetsToPost) {
       try {
-        const result = await postTweetToTwitter(tweet.content)
+  const result = await postTweetToTwitter(tweet.content, tweet.sourceUrl)
 
         if (result.success) {
           results.success++

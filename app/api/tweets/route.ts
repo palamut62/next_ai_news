@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
             if (tweet) {
               // Post to Twitter
               console.log(`🐦 Attempting to post tweet ${id}: "${tweet.content.substring(0, 50)}..."`)
-              const twitterResult = await postTweetToTwitter(tweet.content)
+              const twitterResult = await postTweetToTwitter(tweet.content, tweet.sourceUrl)
               console.log(`📊 Twitter API response for tweet ${id}:`, twitterResult)
 
               if (twitterResult.success) {
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
           const tweet = tweets.find(t => t.id === tweetId)
           if (tweet) {
             // Post to Twitter
-            const twitterResult = await postTweetToTwitter(tweet.content)
+            const twitterResult = await postTweetToTwitter(tweet.content, tweet.sourceUrl)
             if (twitterResult.success) {
               // Update tweet status to posted with Twitter ID
               const tweetIndex = tweets.findIndex(t => t.id === tweetId)
