@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from 'next/navigation'
 import { AuthWrapper } from "@/components/auth-wrapper"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,6 +29,7 @@ import { useToast } from "@/hooks/use-toast"
 
 export default function CreateTweetPage() {
   const [activeTab, setActiveTab] = useState("link")
+  const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isPosting, setIsPosting] = useState(false)
   const [autoPost, setAutoPost] = useState(true)
@@ -266,6 +268,9 @@ export default function CreateTweetPage() {
           title: "Success",
           description: "Tweet posted successfully!"
         })
+
+        // Navigate to tweets page to refresh pending list and stats
+        try { router.push('/tweets') } catch (e) { /* ignore */ }
 
         // Reset form
         setGeneratedTweet("")
