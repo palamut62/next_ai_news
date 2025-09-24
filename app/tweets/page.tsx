@@ -24,7 +24,7 @@ export default function TweetsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("pending")
   const [sourceFilter, setSourceFilter] = useState<string>("all")
   const [selectedTweets, setSelectedTweets] = useState<string[]>([])
-  const [autoPost, setAutoPost] = useState(false)
+  const [autoPost, setAutoPost] = useState(true)
   const [bulkActionsVisible, setBulkActionsVisible] = useState(false)
   const { toast } = useToast()
 
@@ -64,6 +64,29 @@ export default function TweetsPage() {
     })()
     return () => { mounted = false }
   }, [])
+
+  // Handle autoPost toggle with server-side persistence
+  const handleAutoPostToggle = async (checked: boolean) => {
+    setAutoPost(checked)
+
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ automation: { autoPost: checked } }),
+      })
+
+      if (!res.ok) {
+        console.error('Failed to save autoPost setting')
+        // Revert on failure
+        setAutoPost(!checked)
+      }
+    } catch (e) {
+      console.error('Error saving autoPost setting:', e)
+      // Revert on failure
+      setAutoPost(!checked)
+    }
+  }
 
   const fetchAiNews = async () => {
     setIsFetchingNews(true)
@@ -351,7 +374,7 @@ export default function TweetsPage() {
                 <Switch
                   id="auto-post"
                   checked={autoPost}
-                  onCheckedChange={setAutoPost}
+                  onCheckedChange={handleAutoPostToggle}
                 />
                 <Label htmlFor="auto-post" className="text-sm">
                   Auto-post approved tweets
