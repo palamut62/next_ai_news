@@ -79,12 +79,17 @@ export default function GitHubPage() {
           description: `Fetched ${data.repos.length} trending repositories from GitHub${filterInfo}.`,
         })
       } else {
-        throw new Error(data.error)
+        if (response.status === 401) {
+          throw new Error("Authentication required. Please refresh the page and log in again.")
+        } else {
+          throw new Error(data.error || "Failed to fetch repositories")
+        }
       }
     } catch (error) {
+      console.error("GitHub fetch error:", error)
       toast({
         title: "Error",
-        description: "Failed to fetch repositories. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to fetch repositories. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -142,7 +147,7 @@ export default function GitHubPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to generate tweet. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to generate tweet. Please try again.",
         variant: "destructive",
       })
     } finally {

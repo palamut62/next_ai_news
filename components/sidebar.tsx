@@ -43,7 +43,11 @@ export function Sidebar() {
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center px-6 border-b border-sidebar-border">
-            <Bot className="h-8 w-8 text-sidebar-primary" />
+            <img
+              src="/logo.png"
+              alt="AI Tweet Bot Logo"
+              className="h-8 w-auto"
+            />
             <span className="ml-3 text-lg font-semibold text-sidebar-foreground">AI Tweet Bot</span>
           </div>
 

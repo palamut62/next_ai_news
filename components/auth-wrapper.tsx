@@ -154,8 +154,12 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-              <Bot className="h-6 w-6 text-primary" />
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="AI Tweet Bot Logo"
+                className="h-10 w-auto"
+              />
             </div>
             <CardTitle className="text-2xl font-bold">AI Tweet Bot</CardTitle>
             <CardDescription>
