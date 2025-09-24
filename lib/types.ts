@@ -7,6 +7,7 @@ export interface Tweet {
   aiScore: number
   status: "pending" | "approved" | "rejected" | "posted"
   createdAt: string
+  newsDate?: string
   scheduledAt?: string
   postedAt?: string
   twitterId?: string

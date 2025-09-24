@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AuthWrapper } from "@/components/auth-wrapper"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { SettingsSection } from "@/components/settings-section"
@@ -80,7 +80,8 @@ const availableLanguages = [
 ]
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>(initialSettings)
+  const [settings, setSettings] = useState<Settings | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [testingTelegram, setTestingTelegram] = useState(false)
   const [isFetchingNews, setIsFetchingNews] = useState(false)
@@ -88,9 +89,9 @@ export default function SettingsPage() {
 
   const updateSettings = (section: keyof Settings, key: string, value: any) => {
     setSettings((prev) => ({
-      ...prev,
+      ...prev!,
       [section]: {
-        ...prev[section],
+        ...prev![section],
         [key]: value,
       },
     }))
@@ -98,11 +99,11 @@ export default function SettingsPage() {
 
   const updateNestedSettings = (section: keyof Settings, subsection: string, key: string, value: any) => {
     setSettings((prev) => ({
-      ...prev,
+      ...prev!,
       [section]: {
-        ...prev[section],
+        ...prev![section],
         [subsection]: {
-          ...(prev[section] as any)[subsection],
+          ...(prev![section] as any)[subsection],
           [key]: value,
         },
       },
@@ -110,7 +111,7 @@ export default function SettingsPage() {
   }
 
   const toggleLanguage = (language: string) => {
-    const currentLanguages = settings.github.languages
+    const currentLanguages = settings!.github.languages
     const newLanguages = currentLanguages.includes(language)
       ? currentLanguages.filter((l) => l !== language)
       : [...currentLanguages, language]
@@ -119,24 +120,62 @@ export default function SettingsPage() {
   }
 
   const handleSave = async () => {
+    if (!settings) return
+
     setIsSaving(true)
     try {
-      // In a real app, this would save to your API
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      toast({
-        title: "Settings saved",
-        description: "Your configuration has been updated successfully.",
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
       })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to save settings')
+      }
+
+      const data = await res.json()
+      toast({ title: 'Settings saved', description: 'Your configuration has been updated successfully.' })
+      setSettings(data)
     } catch (error) {
+      console.error('Save error:', error)
       toast({
         title: "Error",
-        description: "Failed to save settings. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to save settings. Please try again.",
         variant: "destructive",
       })
     } finally {
       setIsSaving(false)
     }
   }
+
+  // Load settings from server on mount
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetch('/api/settings', { credentials: 'same-origin' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (mounted && data) {
+          setSettings(data)
+        }
+      } catch (e) {
+        console.error('Failed to load settings:', e)
+        // Fallback to initial settings if API fails
+        if (mounted) {
+          setSettings(initialSettings)
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false)
+        }
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
 
   const testTelegramConnection = async () => {
     setTestingTelegram(true)
@@ -190,6 +229,21 @@ export default function SettingsPage() {
     }
   }
 
+  if (isLoading || !settings) {
+    return (
+      <AuthWrapper>
+        <DashboardLayout>
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading settings...</p>
+            </div>
+          </div>
+        </DashboardLayout>
+      </AuthWrapper>
+    )
+  }
+
   return (
     <AuthWrapper>
       <DashboardLayout>
@@ -220,7 +274,7 @@ export default function SettingsPage() {
                   </div>
                   <Switch
                     id="automation-enabled"
-                    checked={settings.automation.enabled}
+                    checked={settings!.automation.enabled}
                     onCheckedChange={(checked) => updateSettings("automation", "enabled", checked)}
                   />
                 </div>
@@ -228,8 +282,8 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="check-interval">Check Interval (hours)</Label>
                   <Select
-                    value={settings.automation.checkInterval.toString()}
-                    onValueChange={(value) => updateSettings("automation", "checkInterval", Number.parseInt(value))}
+                    value={settings!.automation?.checkInterval?.toString() || '0'}
+                    onValueChange={(value) => updateSettings('automation', 'checkInterval', Number.parseInt(value))}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -252,7 +306,7 @@ export default function SettingsPage() {
                     type="number"
                     min="1"
                     max="50"
-                    value={settings.automation.maxArticlesPerCheck}
+                    value={settings!.automation.maxArticlesPerCheck}
                     onChange={(e) =>
                       updateSettings("automation", "maxArticlesPerCheck", Number.parseInt(e.target.value))
                     }
@@ -260,13 +314,13 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="min-score">Minimum AI Score: {settings.automation.minAiScore}</Label>
+                  <Label htmlFor="min-score">Minimum AI Score: {settings!.automation.minAiScore}</Label>
                   <Slider
                     id="min-score"
                     min={1}
                     max={10}
                     step={0.1}
-                    value={[settings.automation.minAiScore]}
+                    value={[settings!.automation.minAiScore]}
                     onValueChange={([value]) => updateSettings("automation", "minAiScore", value)}
                     className="w-full"
                   />
@@ -279,7 +333,7 @@ export default function SettingsPage() {
                   </div>
                   <Switch
                     id="auto-post"
-                    checked={settings.automation.autoPost}
+                    checked={settings!.automation.autoPost}
                     onCheckedChange={(checked) => updateSettings("automation", "autoPost", checked)}
                   />
                 </div>
@@ -291,7 +345,7 @@ export default function SettingsPage() {
                     type="number"
                     min="1"
                     max="300"
-                    value={settings.automation.rateLimitDelay}
+                    value={settings!.automation.rateLimitDelay}
                     onChange={(e) => updateSettings("automation", "rateLimitDelay", Number.parseInt(e.target.value))}
                   />
                 </div>
@@ -311,7 +365,7 @@ export default function SettingsPage() {
                   </div>
                   <Switch
                     id="github-enabled"
-                    checked={settings.github.enabled}
+                    checked={settings!.github.enabled}
                     onCheckedChange={(checked) => updateSettings("github", "enabled", checked)}
                   />
                 </div>
@@ -322,12 +376,12 @@ export default function SettingsPage() {
                     {availableLanguages.map((language) => (
                       <Badge
                         key={language}
-                        variant={settings.github.languages.includes(language) ? "default" : "outline"}
+                        variant={settings!.github.languages.includes(language) ? "default" : "outline"}
                         className="cursor-pointer"
                         onClick={() => toggleLanguage(language)}
                       >
                         {language}
-                        {settings.github.languages.includes(language) && <X className="h-3 w-3 ml-1" />}
+                        {settings!.github.languages.includes(language) && <X className="h-3 w-3 ml-1" />}
                       </Badge>
                     ))}
                   </div>
@@ -337,7 +391,7 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <Label htmlFor="time-range">Time Range</Label>
                     <Select
-                      value={settings.github.timeRange}
+                      value={settings!.github.timeRange}
                       onValueChange={(value: "daily" | "weekly" | "monthly") =>
                         updateSettings("github", "timeRange", value)
                       }
@@ -360,7 +414,7 @@ export default function SettingsPage() {
                       type="number"
                       min="1"
                       max="20"
-                      value={settings.github.maxRepos}
+                      value={settings!.github.maxRepos}
                       onChange={(e) => updateSettings("github", "maxRepos", Number.parseInt(e.target.value))}
                     />
                   </div>
@@ -371,7 +425,7 @@ export default function SettingsPage() {
                       id="min-stars"
                       type="number"
                       min="0"
-                      value={settings.github.minStars}
+                      value={settings!.github.minStars}
                       onChange={(e) => updateSettings("github", "minStars", Number.parseInt(e.target.value))}
                     />
                   </div>
@@ -438,7 +492,7 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="ai-provider">AI Provider</Label>
                   <Select
-                    value={settings.ai.provider}
+                    value={settings!.ai.provider}
                     onValueChange={(value: "gemini" | "openai" | "claude") => updateSettings("ai", "provider", value)}
                   >
                     <SelectTrigger>
@@ -456,7 +510,7 @@ export default function SettingsPage() {
                   <Label htmlFor="ai-model">Model</Label>
                   <Input
                     id="ai-model"
-                    value={settings.ai.model}
+                    value={settings!.ai.model}
                     onChange={(e) => updateSettings("ai", "model", e.target.value)}
                     placeholder="gemini-2.0-flash"
                   />
@@ -467,20 +521,20 @@ export default function SettingsPage() {
                   <Input
                     id="ai-key"
                     type="password"
-                    value={settings.ai.apiKey}
+                    value={settings!.ai.apiKey}
                     onChange={(e) => updateSettings("ai", "apiKey", e.target.value)}
                     placeholder="Enter your API key"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="temperature">Temperature: {settings.ai.temperature}</Label>
+                  <Label htmlFor="temperature">Temperature: {settings!.ai.temperature}</Label>
                   <Slider
                     id="temperature"
                     min={0}
                     max={2}
                     step={0.1}
-                    value={[settings.ai.temperature]}
+                    value={[settings!.ai.temperature]}
                     onValueChange={([value]) => updateSettings("ai", "temperature", value)}
                   />
                 </div>
@@ -500,19 +554,19 @@ export default function SettingsPage() {
                   </div>
                   <Switch
                     id="telegram-enabled"
-                    checked={settings.notifications.telegram.enabled}
+                    checked={settings!.notifications.telegram.enabled}
                     onCheckedChange={(checked) => updateNestedSettings("notifications", "telegram", "enabled", checked)}
                   />
                 </div>
 
-                {settings.notifications.telegram.enabled && (
+                {settings!.notifications.telegram.enabled && (
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="bot-token">Bot Token</Label>
                       <Input
                         id="bot-token"
                         type="password"
-                        value={settings.notifications.telegram.botToken}
+                        value={settings!.notifications.telegram.botToken}
                         onChange={(e) => updateNestedSettings("notifications", "telegram", "botToken", e.target.value)}
                         placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
                       />
@@ -523,7 +577,7 @@ export default function SettingsPage() {
                       <div className="flex gap-2">
                         <Input
                           id="chat-id"
-                          value={settings.notifications.telegram.chatId}
+                          value={settings!.notifications.telegram.chatId}
                           onChange={(e) => updateNestedSettings("notifications", "telegram", "chatId", e.target.value)}
                           placeholder="123456789"
                         />
@@ -546,7 +600,7 @@ export default function SettingsPage() {
                   <Input
                     id="twitter-api-key"
                     type="password"
-                    value={settings.twitter.apiKey}
+                    value={settings!.twitter.apiKey}
                     onChange={(e) => updateSettings("twitter", "apiKey", e.target.value)}
                     placeholder="Enter your Twitter API key"
                   />
@@ -557,7 +611,7 @@ export default function SettingsPage() {
                   <Input
                     id="twitter-api-secret"
                     type="password"
-                    value={settings.twitter.apiSecret}
+                    value={settings!.twitter.apiSecret}
                     onChange={(e) => updateSettings("twitter", "apiSecret", e.target.value)}
                     placeholder="Enter your Twitter API secret"
                   />
@@ -568,7 +622,7 @@ export default function SettingsPage() {
                   <Input
                     id="twitter-access-token"
                     type="password"
-                    value={settings.twitter.accessToken}
+                    value={settings!.twitter.accessToken}
                     onChange={(e) => updateSettings("twitter", "accessToken", e.target.value)}
                     placeholder="Enter your access token"
                   />
@@ -579,7 +633,7 @@ export default function SettingsPage() {
                   <Input
                     id="twitter-access-secret"
                     type="password"
-                    value={settings.twitter.accessTokenSecret}
+                    value={settings!.twitter.accessTokenSecret}
                     onChange={(e) => updateSettings("twitter", "accessTokenSecret", e.target.value)}
                     placeholder="Enter your access token secret"
                   />

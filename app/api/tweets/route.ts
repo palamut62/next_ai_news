@@ -45,7 +45,12 @@ export async function GET(request: NextRequest) {
 
     // Filter by status if provided; otherwise hide posted tweets from main view
     if (status) {
-      tweets = tweets.filter(tweet => tweet.status === status)
+      if (status === "all") {
+        // Return all tweets regardless of status
+        tweets = tweets
+      } else {
+        tweets = tweets.filter(tweet => tweet.status === status)
+      }
     } else {
       tweets = tweets.filter(tweet => tweet.status !== 'posted')
     }

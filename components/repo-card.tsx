@@ -4,11 +4,11 @@ import { Card, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { GitHubRepo } from "@/lib/types"
-import { Star, GitFork, ExternalLink, MessageSquare, Calendar } from "lucide-react"
+import { Star, GitFork, ExternalLink, MessageSquare, Calendar, TrendingUp } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
 interface RepoCardProps {
-  repo: GitHubRepo
+  repo: GitHubRepo & { trendingScore?: number }
   onGenerateTweet?: (repo: GitHubRepo) => void
   isGenerating?: boolean
 }
@@ -62,6 +62,12 @@ export function RepoCard({ repo, onGenerateTweet, isGenerating }: RepoCardProps)
                 <GitFork className="h-4 w-4" />
                 <span>{repo.forks.toLocaleString()}</span>
               </div>
+              {repo.trendingScore && (
+                <div className="flex items-center gap-1 text-orange-500">
+                  <TrendingUp className="h-4 w-4" />
+                  <span>{repo.trendingScore.toFixed(0)}</span>
+                </div>
+              )}
               <div className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
                 <span>{formatDistanceToNow(new Date(repo.updatedAt), { addSuffix: true })}</span>
@@ -69,7 +75,8 @@ export function RepoCard({ repo, onGenerateTweet, isGenerating }: RepoCardProps)
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <Badge variant="outline" className="text-primary border-primary/20">
+            <Badge variant="outline" className="text-orange-500 border-orange-500/20">
+              <TrendingUp className="h-3 w-3 mr-1" />
               Trending
             </Badge>
             <Button

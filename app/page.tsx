@@ -1,23 +1,66 @@
+"use client"
+
 import { AuthWrapper } from "@/components/auth-wrapper"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { StatsCard } from "@/components/stats-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { MessageSquare, TrendingUp, Clock, CheckCircle, AlertCircle, Pause } from "lucide-react"
+import { MessageSquare, TrendingUp, Clock, CheckCircle, AlertCircle, Pause, RefreshCw } from "lucide-react"
 import { QuickActions } from "@/components/quick-actions"
-
-// Using real data from API - no mock data
-const stats = {
-  totalTweets: 0,
-  pendingTweets: 0,
-  avgEngagement: 0,
-  successRate: 0,
-}
-
-const recentActivity = []
+import { useState, useEffect } from "react"
 
 export default function Dashboard() {
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalTweets: 0,
+    pendingTweets: 0,
+    approvedTweets: 0,
+    postedTweets: 0,
+    avgEngagement: 0,
+    successRate: 0,
+  })
+
+  const fetchDashboardStats = async () => {
+    try {
+      setLoading(true)
+
+      // Get current tweets - include all statuses (including posted)
+      const tweetsResponse = await fetch('/api/tweets?status=all')
+      const tweets = await tweetsResponse.json()
+
+      // Get statistics
+      const statsResponse = await fetch('/api/statistics/tweet-stats')
+      const statsData = await statsResponse.json()
+
+      // Calculate current stats
+      const pendingTweets = tweets.filter((t: any) => t.status === 'pending').length
+      const approvedTweets = tweets.filter((t: any) => t.status === 'approved').length
+      const postedTweets = tweets.filter((t: any) => t.status === 'posted').length
+      const totalTweets = tweets.length
+
+      const successRate = statsData.stats?.totalProcessed
+        ? Math.round((statsData.stats.totalPosted / statsData.stats.totalProcessed) * 100)
+        : 0
+
+      setStats({
+        totalTweets,
+        pendingTweets,
+        approvedTweets,
+        postedTweets,
+        avgEngagement: 0, // TODO: Calculate from engagement data
+        successRate,
+      })
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchDashboardStats()
+  }, [])
   return (
     <AuthWrapper>
       <DashboardLayout>
@@ -33,9 +76,9 @@ export default function Dashboard() {
                 <div className="w-2 h-2 bg-green-500 rounded-full mr-2" />
                 Automation Active
               </Badge>
-              <Button size="sm">
-                <Pause className="h-4 w-4 mr-2" />
-                Pause
+              <Button size="sm" onClick={fetchDashboardStats} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Loading...' : 'Refresh'}
               </Button>
             </div>
           </div>
@@ -45,9 +88,8 @@ export default function Dashboard() {
             <StatsCard
               title="Total Tweets"
               value={stats.totalTweets}
-              description="All time"
+              description="All tweets"
               icon={MessageSquare}
-              trend={{ value: 12, isPositive: true }}
             />
             <StatsCard
               title="Pending Approval"
@@ -56,18 +98,16 @@ export default function Dashboard() {
               icon={Clock}
             />
             <StatsCard
-              title="Avg Engagement"
-              value={`${stats.avgEngagement}%`}
-              description="Last 30 days"
-              icon={TrendingUp}
-              trend={{ value: 2.1, isPositive: true }}
+              title="Approved"
+              value={stats.approvedTweets}
+              description="Ready to post"
+              icon={CheckCircle}
             />
             <StatsCard
-              title="Success Rate"
-              value={`${stats.successRate}%`}
-              description="Posted successfully"
-              icon={CheckCircle}
-              trend={{ value: 0.5, isPositive: true }}
+              title="Posted"
+              value={stats.postedTweets}
+              description="On Twitter"
+              icon={TrendingUp}
             />
           </div>
 
@@ -80,19 +120,22 @@ export default function Dashboard() {
                 <CardDescription>Latest automation events and updates</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                    <div className="mt-1">
-                      {activity.status === "success" && <CheckCircle className="h-4 w-4 text-green-500" />}
-                      {activity.status === "pending" && <Clock className="h-4 w-4 text-yellow-500" />}
-                      {activity.status === "info" && <AlertCircle className="h-4 w-4 text-blue-500" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{activity.message}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{activity.time}</p>
-                    </div>
+                {loading ? (
+                  <div className="text-center py-8">
+                    <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Loading activity...</p>
                   </div>
-                ))}
+                ) : (
+                  <div className="text-center py-8">
+                    <CheckCircle className="h-6 w-6 mx-auto mb-2 text-green-500" />
+                    <p className="text-sm text-muted-foreground">
+                      {stats.pendingTweets} pending • {stats.approvedTweets} approved • {stats.postedTweets} posted
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Success rate: {stats.successRate}%
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

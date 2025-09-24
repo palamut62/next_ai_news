@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AuthWrapper } from "@/components/auth-wrapper"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { RepoCard } from "@/components/repo-card"
@@ -12,90 +12,20 @@ import type { GitHubRepo } from "@/lib/types"
 import { Search, RefreshCw, Github, TrendingUp } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-// Mock data - in a real app this would come from GitHub API
-const mockRepos: GitHubRepo[] = [
-  {
-    id: "1",
-    name: "neural-search",
-    fullName: "awesome-dev/neural-search",
-    description:
-      "A blazing fast semantic search engine built with Rust and modern ML techniques. Perfect for developers looking to add intelligent search to their applications.",
-    stars: 15420,
-    forks: 892,
-    language: "Rust",
-    url: "https://github.com/awesome-dev/neural-search",
-    updatedAt: "2024-01-15T10:30:00Z",
-  },
-  {
-    id: "2",
-    name: "react-flow-builder",
-    fullName: "ui-libs/react-flow-builder",
-    description:
-      "Visual flow builder for React applications. Create complex workflows with drag-and-drop interface and real-time collaboration features.",
-    stars: 8934,
-    forks: 567,
-    language: "TypeScript",
-    url: "https://github.com/ui-libs/react-flow-builder",
-    updatedAt: "2024-01-15T08:45:00Z",
-  },
-  {
-    id: "3",
-    name: "ai-code-reviewer",
-    fullName: "devtools/ai-code-reviewer",
-    description:
-      "AI-powered code review assistant that provides intelligent suggestions and catches potential bugs before they reach production.",
-    stars: 12567,
-    forks: 1234,
-    language: "Python",
-    url: "https://github.com/devtools/ai-code-reviewer",
-    updatedAt: "2024-01-15T07:20:00Z",
-  },
-  {
-    id: "4",
-    name: "micro-frontend-toolkit",
-    fullName: "architecture/micro-frontend-toolkit",
-    description:
-      "Complete toolkit for building and managing micro-frontend architectures. Includes routing, state management, and deployment tools.",
-    stars: 6789,
-    forks: 445,
-    language: "JavaScript",
-    url: "https://github.com/architecture/micro-frontend-toolkit",
-    updatedAt: "2024-01-14T16:15:00Z",
-  },
-  {
-    id: "5",
-    name: "quantum-simulator",
-    fullName: "quantum-computing/quantum-simulator",
-    description:
-      "High-performance quantum computing simulator with visualization tools. Great for learning quantum algorithms and testing quantum circuits.",
-    stars: 4321,
-    forks: 234,
-    language: "C++",
-    url: "https://github.com/quantum-computing/quantum-simulator",
-    updatedAt: "2024-01-14T14:30:00Z",
-  },
-  {
-    id: "6",
-    name: "blockchain-analytics",
-    fullName: "crypto-tools/blockchain-analytics",
-    description:
-      "Advanced blockchain analytics platform with real-time transaction monitoring, wallet tracking, and DeFi protocol analysis.",
-    stars: 9876,
-    forks: 678,
-    language: "Go",
-    url: "https://github.com/crypto-tools/blockchain-analytics",
-    updatedAt: "2024-01-14T12:45:00Z",
-  },
-]
-
 export default function GitHubPage() {
-  const [repos, setRepos] = useState<GitHubRepo[]>(mockRepos)
+  const [repos, setRepos] = useState<GitHubRepo[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [languageFilter, setLanguageFilter] = useState<string>("all")
   const [sortBy, setSortBy] = useState<string>("stars")
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [generatingTweets, setGeneratingTweets] = useState<Set<string>>(new Set())
   const { toast } = useToast()
+
+  // Fetch repositories on page load
+  useEffect(() => {
+    fetchGitHubRepos(true)
+  }, [])
 
   const languages = Array.from(new Set(repos.map((repo) => repo.language))).sort()
 
@@ -120,15 +50,36 @@ export default function GitHubPage() {
       }
     })
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
+  const fetchGitHubRepos = async (showLoading = false) => {
+    if (showLoading) {
+      setIsLoading(true)
+    } else {
+      setIsRefreshing(true)
+    }
+
     try {
-      // In a real app, this would fetch from GitHub API
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-      toast({
-        title: "Repositories updated",
-        description: "Fetched latest trending repositories from GitHub.",
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/github/fetch-repos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          count: 20
+        })
       })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setRepos(data.repos)
+        const filterInfo = data.filters ?
+          ` (filtered ${data.filters.duplicatesRemoved} duplicates from ${data.filters.totalProcessed} total)` :
+          ''
+        toast({
+          title: "Repositories updated",
+          description: `Fetched ${data.repos.length} trending repositories from GitHub${filterInfo}.`,
+        })
+      } else {
+        throw new Error(data.error)
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -136,19 +87,56 @@ export default function GitHubPage() {
         variant: "destructive",
       })
     } finally {
+      setIsLoading(false)
       setIsRefreshing(false)
     }
+  }
+
+  const handleRefresh = () => {
+    fetchGitHubRepos(false)
   }
 
   const handleGenerateTweet = async (repo: GitHubRepo) => {
     setGeneratingTweets((prev) => new Set(prev).add(repo.id))
     try {
-      // In a real app, this would call your AI service to generate a tweet
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-      toast({
-        title: "Tweet generated",
-        description: `Created a new tweet for ${repo.name}. Check pending tweets to review.`,
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/tweets/generate-from-github`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo })
       })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Save the generated tweet to pending list
+        const saveResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/tweets/save`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: data.tweet,
+            source: "github",
+            sourceUrl: repo.url,
+            sourceTitle: repo.name,
+            aiScore: data.aiScore,
+            status: "pending"
+          })
+        })
+
+        if (saveResponse.ok) {
+          toast({
+            title: "Tweet generated and saved!",
+            description: `Created a tweet for ${repo.name} and added to pending tweets.`,
+          })
+        } else {
+          toast({
+            title: "Tweet generated but save failed",
+            description: `Generated tweet for ${repo.name} but couldn't save it.`,
+            variant: "destructive",
+          })
+        }
+      } else {
+        throw new Error(data.error || "Failed to generate tweet")
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -165,7 +153,7 @@ export default function GitHubPage() {
   }
 
   const totalStars = repos.reduce((sum, repo) => sum + repo.stars, 0)
-  const avgStars = Math.round(totalStars / repos.length)
+  const avgStars = repos.length > 0 ? Math.round(totalStars / repos.length) : 0
 
   return (
     <AuthWrapper>
@@ -268,7 +256,12 @@ export default function GitHubPage() {
 
           {/* Repository List */}
           <div className="space-y-4">
-            {filteredRepos.length === 0 ? (
+            {isLoading ? (
+              <div className="text-center py-12">
+                <RefreshCw className="h-12 w-12 animate-spin mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">Loading trending repositories...</p>
+              </div>
+            ) : filteredRepos.length === 0 ? (
               <div className="text-center py-12">
                 <Github className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">No repositories found matching your criteria.</p>

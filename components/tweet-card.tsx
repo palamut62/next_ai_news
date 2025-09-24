@@ -93,6 +93,12 @@ export function TweetCard({ tweet, onApprove, onReject, onDelete, isSelected, on
             {tweet.sourceTitle}
             <ExternalLink className="h-3 w-3" />
           </a>
+          {tweet.newsDate && (
+            <>
+              <span>•</span>
+              <span>News Date: {new Date(tweet.newsDate).toLocaleDateString()}</span>
+            </>
+          )}
         </div>
 
         {/* Engagement Stats (if posted) */}

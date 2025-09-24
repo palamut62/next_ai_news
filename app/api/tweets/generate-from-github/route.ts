@@ -7,57 +7,13 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Authentication required" }, { status: 401 })
     }
 
-    const { url } = await request.json()
+    const { repo } = await request.json()
 
-    if (!url) {
-      return Response.json({ error: "URL is required" }, { status: 400 })
+    if (!repo || !repo.name || !repo.description || !repo.url) {
+      return Response.json({ error: "Repository data is required" }, { status: 400 })
     }
 
-    // Validate URL format
-    try {
-      new URL(url)
-    } catch {
-      return Response.json({ error: "Invalid URL format" }, { status: 400 })
-    }
-
-    // Fetch article content
-    let articleContent = ""
-    let articleTitle = ""
-
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; AI-Tweet-Bot/1.0)'
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch: ${response.status}`)
-      }
-
-      const html = await response.text()
-
-      // Basic content extraction (in production, use a proper HTML parser)
-      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-      articleTitle = titleMatch ? titleMatch[1].trim() : "Article"
-
-      // Extract text content (simplified)
-      const textContent = html
-        .replace(/<script[^>]*>.*?<\/script>/gis, '')
-        .replace(/<style[^>]*>.*?<\/style>/gis, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .substring(0, 2000) // Limit content for AI processing
-
-      articleContent = textContent
-    } catch (error) {
-      console.error("Failed to fetch article:", error)
-      articleContent = `Article from ${url}`
-      articleTitle = "Web Article"
-    }
-
-    // Use Gemini AI to generate tweet
+    // Use Gemini AI to generate tweet from GitHub repository
     try {
       const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
         method: 'POST',
@@ -67,17 +23,21 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `Create an engaging Twitter tweet based on this article content. The tweet should be:
-- Maximum 240 characters (leaving room for the source URL)
+              text: `Create an engaging Twitter tweet about this GitHub repository. The tweet should be:
+- Maximum 240 characters (leaving room for the repository URL)
 - Include relevant hashtags (2-3 max)
 - Be engaging and encourage interaction
 - Include an emoji at the start
-- IMPORTANT: Do NOT include the source URL in your response - it will be added automatically
+- Focus on what makes this repository interesting/valuable
+- IMPORTANT: Do NOT include the repository URL in your response - it will be added automatically
 
-Article Title: ${articleTitle}
-Article Content: ${articleContent}
+Repository Name: ${repo.name}
+Repository Description: ${repo.description}
+Language: ${repo.language}
+Stars: ${repo.stars.toLocaleString()}
+Forks: ${repo.forks.toLocaleString()}
 
-Source URL that will be added: ${url}
+Repository URL that will be added: ${repo.url}
 
 Generate only the tweet text, nothing else.`
             }]
@@ -94,9 +54,8 @@ Generate only the tweet text, nothing else.`
       if (geminiData.candidates && geminiData.candidates[0]?.content?.parts[0]?.text) {
         let generatedTweet = geminiData.candidates[0].content.parts[0].text.trim()
 
-        // Add source URL to the tweet
-        const sourceUrl = url
-        const finalTweet = `${generatedTweet}\n\n${sourceUrl}`
+        // Add repository URL to the tweet
+        const finalTweet = `${generatedTweet}\n\n${repo.url}`
 
         // Calculate AI score based on length, hashtags, emojis
         let score = 7.0
@@ -110,14 +69,16 @@ Generate only the tweet text, nothing else.`
 
         if (finalTweet.includes('?') || finalTweet.includes('!')) score += 0.5
 
+        // Bonus for mentioning specific repo features
+        if (generatedTweet.toLowerCase().includes(repo.language.toLowerCase())) score += 0.5
+        if (generatedTweet.includes(repo.stars.toString()) || generatedTweet.includes('star')) score += 0.3
+
         const aiScore = Math.min(10, score)
 
         return Response.json({
           success: true,
           tweet: finalTweet,
           aiScore: parseFloat(aiScore.toFixed(1)),
-          sourceUrl: url,
-          sourceTitle: articleTitle,
           tweetLength: finalLength,
           originalTweetLength: generatedTweet.length
         })
@@ -125,8 +86,8 @@ Generate only the tweet text, nothing else.`
         console.error("Failed to generate tweet with AI - no candidates returned")
         return Response.json({
           success: false,
-          error: "AI generation failed. Please try again with a different URL.",
-          message: "The AI service couldn't generate a tweet from the provided article."
+          error: "AI generation failed. Please try again with a different repository.",
+          message: "The AI service couldn't generate a tweet from the provided repository."
         }, { status: 500 })
       }
     } catch (aiError) {
@@ -139,7 +100,7 @@ Generate only the tweet text, nothing else.`
     }
 
   } catch (error) {
-    console.error("Generate from link error:", error)
+    console.error("Generate from GitHub repo error:", error)
     return Response.json({ error: "Server error" }, { status: 500 })
   }
 }

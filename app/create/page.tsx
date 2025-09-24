@@ -41,6 +41,7 @@ export default function CreateTweetPage() {
   // Generated tweet
   const [generatedTweet, setGeneratedTweet] = useState("")
   const [aiScore, setAiScore] = useState<number | null>(null)
+  const [tweetLength, setTweetLength] = useState<number | null>(null)
 
   const { toast } = useToast()
 
@@ -84,6 +85,7 @@ export default function CreateTweetPage() {
       if (response.ok) {
         setGeneratedTweet(data.tweet)
         setAiScore(data.aiScore)
+        setTweetLength(data.tweetLength || data.tweet.length)
         toast({
           title: "Success",
           description: "Tweet generated successfully!"
@@ -219,6 +221,7 @@ export default function CreateTweetPage() {
         // Reset form
         setGeneratedTweet("")
         setAiScore(null)
+        setTweetLength(null)
         setLinkUrl("")
         setCustomText("")
         removeImage()
@@ -267,6 +270,7 @@ export default function CreateTweetPage() {
         // Reset form
         setGeneratedTweet("")
         setAiScore(null)
+        setTweetLength(null)
         setLinkUrl("")
         setCustomText("")
         removeImage()
@@ -482,8 +486,8 @@ export default function CreateTweetPage() {
                         rows={4}
                       />
                       <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
-                        <span>Characters: {generatedTweet.length}/280</span>
-                        {generatedTweet.length > 280 && (
+                        <span>Characters: {tweetLength || generatedTweet.length}/280</span>
+                        {(tweetLength || generatedTweet.length) > 280 && (
                           <span className="text-destructive">Too long!</span>
                         )}
                       </div>
