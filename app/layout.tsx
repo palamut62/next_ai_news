@@ -11,6 +11,11 @@ export const metadata: Metadata = {
   title: "AI Tweet Bot - Automated Social Media Management",
   description: "Professional AI-powered tweet automation and social media management dashboard",
   generator: "v0.app",
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+    apple: '/favicon.ico',
+  },
 }
 
 export default function RootLayout({
