@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { AuthWrapper } from "@/components/auth-wrapper"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { SettingsSection } from "@/components/settings-section"
@@ -22,7 +22,7 @@ const initialSettings: Settings = {
     checkInterval: 2,
     maxArticlesPerCheck: 10,
     minAiScore: 7.0,
-    autoPost: false,
+    autoPost: true,
     requireApproval: true,
     rateLimitDelay: 30,
   },
@@ -87,28 +87,81 @@ export default function SettingsPage() {
   const [isFetchingNews, setIsFetchingNews] = useState(false)
   const { toast } = useToast()
 
-  const updateSettings = (section: keyof Settings, key: string, value: any) => {
-    setSettings((prev) => ({
-      ...prev!,
-      [section]: {
-        ...prev![section],
-        [key]: value,
-      },
-    }))
-  }
+  // Debouncing refs
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastUpdateRef = useRef<{ section: string; key: string; value: any } | null>(null)
 
-  const updateNestedSettings = (section: keyof Settings, subsection: string, key: string, value: any) => {
-    setSettings((prev) => ({
-      ...prev!,
-      [section]: {
-        ...prev![section],
-        [subsection]: {
-          ...(prev![section] as any)[subsection],
-          [key]: value,
-        },
-      },
-    }))
-  }
+  // Debounced update function to prevent rapid successive updates
+  const updateSettings = useCallback((section: keyof Settings, key: string, value: any) => {
+    // Clear any pending updates
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current)
+    }
+
+    // Store the last update to detect duplicates
+    const currentUpdate = { section, key, value }
+
+    // If this is the same as the last update, ignore it (prevents duplicates)
+    if (lastUpdateRef.current &&
+        lastUpdateRef.current.section === section &&
+        lastUpdateRef.current.key === key &&
+        lastUpdateRef.current.value === value) {
+      return
+    }
+
+    lastUpdateRef.current = currentUpdate
+
+    // Debounce the update to prevent rapid successive calls
+    updateTimeoutRef.current = setTimeout(() => {
+      setSettings((prev) => {
+        if (!prev) return prev
+
+        // Only update if the value actually changed
+        if (prev[section][key] === value) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          [section]: {
+            ...prev[section],
+            [key]: value,
+          },
+        }
+      })
+    }, 100) // 100ms debounce delay
+  }, [])
+
+  const updateNestedSettings = useCallback((section: keyof Settings, subsection: string, key: string, value: any) => {
+    // Clear any pending updates
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current)
+    }
+
+    // Debounce the update to prevent rapid successive calls
+    updateTimeoutRef.current = setTimeout(() => {
+      setSettings((prev) => {
+        if (!prev) return prev
+
+        // Only update if the value actually changed
+        const currentValue = (prev[section] as any)[subsection]?.[key]
+        if (currentValue === value) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          [section]: {
+            ...prev[section],
+            [subsection]: {
+              ...(prev[section] as any)[subsection],
+              [key]: value,
+            },
+          },
+        }
+      })
+    }, 100) // 100ms debounce delay
+  }, [])
 
   const toggleLanguage = (language: string) => {
     const currentLanguages = settings!.github.languages
@@ -126,7 +179,6 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
-        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       })
@@ -156,7 +208,7 @@ export default function SettingsPage() {
     let mounted = true
     ;(async () => {
       try {
-        const res = await fetch('/api/settings', { credentials: 'same-origin' })
+        const res = await fetch('/api/settings')
         if (!res.ok) return
         const data = await res.json()
         if (mounted && data) {
@@ -175,6 +227,15 @@ export default function SettingsPage() {
       }
     })()
     return () => { mounted = false }
+  }, [])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current)
+      }
+    }
   }, [])
 
   const testTelegramConnection = async () => {

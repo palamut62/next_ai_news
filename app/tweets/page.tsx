@@ -47,12 +47,12 @@ export default function TweetsPage() {
     }
   }
 
-  // Load autoPost setting from server-side settings.json on mount
+  // Load autoPost setting from server-side settings.json on mount only
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-  const res = await fetch('/api/settings', { credentials: 'same-origin' })
+        const res = await fetch('/api/settings', { credentials: 'same-origin' })
         if (!res.ok) return
         const settings = await res.json()
         if (mounted && settings?.automation?.autoPost !== undefined) {
@@ -64,29 +64,6 @@ export default function TweetsPage() {
     })()
     return () => { mounted = false }
   }, [])
-
-  // When autoPost changes, persist to server-side settings
-  useEffect(() => {
-    const controller = new AbortController()
-    ;(async () => {
-      try {
-        const res = await fetch('/api/settings', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ automation: { autoPost } }),
-          signal: controller.signal,
-        })
-
-        if (!res.ok) {
-          console.error('Failed to save autoPost setting')
-        }
-      } catch (e) {
-        console.error('Error saving autoPost setting:', e)
-      }
-    })()
-    return () => controller.abort()
-  }, [autoPost])
 
   const fetchAiNews = async () => {
     setIsFetchingNews(true)

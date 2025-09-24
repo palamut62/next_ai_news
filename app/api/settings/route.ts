@@ -11,7 +11,7 @@ const DEFAULT_SETTINGS = {
     checkInterval: 2,
     maxArticlesPerCheck: 10,
     minAiScore: 7.0,
-    autoPost: false,
+    autoPost: true,
     requireApproval: true,
     rateLimitDelay: 30,
   },
@@ -101,9 +101,7 @@ export async function GET(request: NextRequest) {
   // if (!checkAuth(request)) return requireAuth()
 
   try {
-  const settingsFromFile = await readSettings();
-  // Ensure returned settings always have the full default shape
-  const settings = mergeDeep(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), settingsFromFile || {});
+  const settings = await readSettings();
   console.log('GET settings from file:', settings, 'File path:', SETTINGS_FILE);
   return NextResponse.json(settings);
   } catch (err) {
@@ -128,7 +126,7 @@ export async function POST(request: NextRequest) {
     const current = await readSettings();
 
     // Deep merge update into current settings so nested keys aren't wiped
-    const merged = mergeDeep(JSON.parse(JSON.stringify(current || DEFAULT_SETTINGS)), update || {});
+    const merged = mergeDeep(JSON.parse(JSON.stringify(current)), update || {});
 
     // Ensure data types are correct
     if (merged.automation && typeof merged.automation.minAiScore === 'number') {

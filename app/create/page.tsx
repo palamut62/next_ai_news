@@ -30,7 +30,7 @@ export default function CreateTweetPage() {
   const [activeTab, setActiveTab] = useState("link")
   const [isGenerating, setIsGenerating] = useState(false)
   const [isPosting, setIsPosting] = useState(false)
-  const [autoPost, setAutoPost] = useState(false)
+  const [autoPost, setAutoPost] = useState(true)
 
   // Form states
   const [linkUrl, setLinkUrl] = useState("")
