@@ -61,6 +61,7 @@ export default function GitHubPage() {
       const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/github/fetch-repos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           count: 20
         })
@@ -102,6 +103,7 @@ export default function GitHubPage() {
       const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/tweets/generate-from-github`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ repo })
       })
 

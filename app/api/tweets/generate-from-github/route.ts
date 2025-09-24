@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
           contents: [{
             parts: [{
               text: `Create an engaging Twitter tweet about this GitHub repository. The tweet should be:
-- Maximum 240 characters (leaving room for the repository URL)
+- Maximum ${Math.max(200, 280 - repo.url.length - 3)} characters (leaving room for the repository URL and newlines)
 - Include relevant hashtags (2-3 max)
 - Be engaging and encourage interaction
 - Include an emoji at the start
@@ -37,7 +37,9 @@ Language: ${repo.language}
 Stars: ${repo.stars.toLocaleString()}
 Forks: ${repo.forks.toLocaleString()}
 
-Repository URL that will be added: ${repo.url}
+Repository URL that will be added (${repo.url.length} characters): ${repo.url}
+
+IMPORTANT: Keep your response under ${Math.max(200, 280 - repo.url.length - 3)} characters to ensure the final tweet with URL stays under 280 characters.
 
 Generate only the tweet text, nothing else.`
             }]
@@ -54,6 +56,14 @@ Generate only the tweet text, nothing else.`
       if (geminiData.candidates && geminiData.candidates[0]?.content?.parts[0]?.text) {
         let generatedTweet = geminiData.candidates[0].content.parts[0].text.trim()
 
+        // Calculate maximum allowed length for the tweet content
+        const maxTweetContentLength = Math.max(200, 280 - repo.url.length - 3) // -3 for \n\n
+
+        // Truncate if necessary
+        if (generatedTweet.length > maxTweetContentLength) {
+          generatedTweet = generatedTweet.substring(0, maxTweetContentLength - 3) + "..."
+        }
+
         // Add repository URL to the tweet
         const finalTweet = `${generatedTweet}\n\n${repo.url}`
 
@@ -64,8 +74,12 @@ Generate only the tweet text, nothing else.`
 
         // Score based on final length (including URL)
         const finalLength = finalTweet.length
-        if (finalLength > 150 && finalLength <= 280) score += 1.0
-        if (finalLength <= 280) score += 0.5 // Bonus for fitting within limit
+        if (finalLength <= 280) {
+          score += 1.5 // Major bonus for fitting within limit
+          if (finalLength > 250) score += 0.5 // Bonus for efficient use of space
+        } else {
+          score -= 2.0 // Penalty for exceeding limit
+        }
 
         if (finalTweet.includes('?') || finalTweet.includes('!')) score += 0.5
 
@@ -73,7 +87,7 @@ Generate only the tweet text, nothing else.`
         if (generatedTweet.toLowerCase().includes(repo.language.toLowerCase())) score += 0.5
         if (generatedTweet.includes(repo.stars.toString()) || generatedTweet.includes('star')) score += 0.3
 
-        const aiScore = Math.min(10, score)
+        const aiScore = Math.max(1.0, Math.min(10, score))
 
         return Response.json({
           success: true,

@@ -76,9 +76,25 @@ async function fetchTrendingRepos(): Promise<GitHubRepo[]> {
 
           for (const item of data.items) {
             // Check for duplicates before adding
-            const isDuplicate = await isDuplicateRepository(item.html_url)
+            try {
+              const isDuplicate = await isDuplicateRepository(item.html_url)
 
-            if (!isDuplicate) {
+              if (!isDuplicate) {
+                trendingRepos.push({
+                  id: item.id.toString(),
+                  name: item.name,
+                  fullName: item.full_name,
+                  description: item.description || "No description available",
+                  stars: item.stargazers_count,
+                  forks: item.forks_count,
+                  language: item.language,
+                  url: item.html_url,
+                  updatedAt: item.updated_at
+                })
+              }
+            } catch (error) {
+              console.error(`Duplicate check failed for ${item.html_url}:`, error)
+              // If duplicate check fails, still add the repo to avoid missing content
               trendingRepos.push({
                 id: item.id.toString(),
                 name: item.name,
@@ -106,18 +122,25 @@ async function fetchTrendingRepos(): Promise<GitHubRepo[]> {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("GitHub fetch repos API called")
+
     if (!checkAuth(request)) {
+      console.log("Authentication failed for GitHub fetch repos")
       return Response.json({ error: "Authentication required" }, { status: 401 })
     }
 
     const { count = 15 } = await request.json()
+    console.log(`Fetching ${count} repositories`)
 
     // Fetch trending repositories
     const allTrendingRepos = await fetchTrendingRepos()
+    console.log(`Found ${allTrendingRepos.length} trending repositories`)
 
     // Remove duplicates and sort by trending score (stars + recent activity)
     const uniqueRepos = allTrendingRepos
       .filter((repo, index, self) => index === self.findIndex(r => r.id === repo.id))
+
+    console.log(`After duplicate removal: ${uniqueRepos.length} unique repositories`)
 
     // Calculate trending score and sort
     const reposWithScore = uniqueRepos.map(repo => {
@@ -130,6 +153,8 @@ export async function POST(request: NextRequest) {
     const finalRepos = reposWithScore
       .sort((a, b) => b.trendingScore - a.trendingScore)
       .slice(0, count)
+
+    console.log(`Returning ${finalRepos.length} repositories`)
 
     return Response.json({
       success: true,
