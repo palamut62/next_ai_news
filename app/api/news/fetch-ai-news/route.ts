@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
-import { checkAndFilterNewsArticles, markNewsArticlesProcessed } from "@/lib/news-duplicate-detector"
+import { checkAndFilterNewsArticles, markNewsArticlesProcessed, newsDuplicateDetector } from "@/lib/news-duplicate-detector"
 import { logAPIEvent } from "@/lib/audit-logger"
 
 // Simple fetch with timeout helper
@@ -29,6 +29,7 @@ interface NewsArticle {
 }
 
 export async function POST(request: NextRequest) {
+  let count = 10
   try {
     const auth = await checkAuth(request)
     if (!auth.authenticated) {
@@ -39,7 +40,8 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Authentication required" }, { status: 401 })
     }
 
-    const { count = 10 } = await request.json()
+    const { count: requestedCount = 10 } = await request.json()
+    count = requestedCount
 
     // Get today's date for filtering recent AI news
     const today = new Date()
