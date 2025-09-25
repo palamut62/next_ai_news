@@ -15,7 +15,13 @@ export async function POST(request: NextRequest) {
     //   return Response.json({ error: "Authentication required" }, { status: 401 })
     // }
 
-    const { article } = await request.json()
+    let article
+    try {
+      const body = await request.json()
+      article = body.article
+    } catch (jsonError) {
+      return Response.json({ error: "Invalid JSON data" }, { status: 400 })
+    }
 
     if (!article || !article.title || !article.url) {
       return Response.json({ error: "Article with title and URL is required" }, { status: 400 })

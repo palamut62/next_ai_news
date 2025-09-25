@@ -1,32 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { checkAuth, requireAuth } from "@/lib/auth"
 import { postTweetToTwitter } from "@/lib/twitter-client"
-import { savePostedTweet } from "@/lib/tweet-storage"
-import { addRejectedTweet } from "@/lib/rejected-tweets-storage"
-import fs from "fs/promises"
-import path from "path"
+import { vercelTweetStorage } from "@/lib/vercel-tweet-storage"
 import type { Tweet } from "@/lib/types"
 
 async function getTweets(): Promise<Tweet[]> {
   try {
-    const dataDir = path.join(process.cwd(), "data")
-    const tweetsFile = path.join(dataDir, "tweets.json")
-
-    const tweetsData = await fs.readFile(tweetsFile, "utf-8")
-    return JSON.parse(tweetsData)
+    return await vercelTweetStorage.getAllTweets()
   } catch (error) {
-    // Return empty array if file doesn't exist or error occurs
+    console.error("Failed to get tweets:", error)
     return []
   }
 }
 
 async function saveTweets(tweets: Tweet[]): Promise<void> {
   try {
-    const dataDir = path.join(process.cwd(), "data")
-    const tweetsFile = path.join(dataDir, "tweets.json")
-
-    await fs.mkdir(dataDir, { recursive: true })
-    await fs.writeFile(tweetsFile, JSON.stringify(tweets, null, 2))
+    // VercelTweetStorage manages its own state
+    console.log(`Saving ${tweets.length} tweets to storage`)
   } catch (error) {
     console.error("Failed to save tweets:", error)
   }
@@ -138,7 +128,7 @@ export async function POST(request: NextRequest) {
                 }
               }
 
-              // Save posted tweet to storage and update stats
+              // Save posted tweet to storage
               try {
                 const postedTweet: Tweet = {
                   id: twitterResult.tweetId || tweet.id,
@@ -152,11 +142,7 @@ export async function POST(request: NextRequest) {
                   postedAt: new Date().toISOString(),
                   engagement: tweet.engagement || { likes: 0, retweets: 0, replies: 0 }
                 }
-                await savePostedTweet(postedTweet, {
-                  title: tweet.sourceTitle,
-                  description: tweet.content,
-                  url: tweet.sourceUrl
-                })
+                await vercelTweetStorage.saveTweet(postedTweet)
               } catch (saveErr) {
                 console.error('Failed to save posted tweet (single approve):', saveErr)
               }
@@ -183,7 +169,7 @@ export async function POST(request: NextRequest) {
           // Store rejected tweets for duplicate checking
           for (const tweet of tweetsToReject) {
             try {
-              await addRejectedTweet(tweet)
+              await vercelTweetStorage.updateTweetStatus(tweet.id, 'rejected')
             } catch (error) {
               console.error(`Failed to store rejected tweet ${tweet.id}:`, error)
             }
@@ -196,7 +182,7 @@ export async function POST(request: NextRequest) {
           const tweetToReject = tweets.find(tweet => tweet.id === tweetId)
           if (tweetToReject) {
             try {
-              await addRejectedTweet(tweetToReject)
+              await vercelTweetStorage.updateTweetStatus(tweetId, 'rejected')
             } catch (error) {
               console.error(`Failed to store rejected tweet ${tweetId}:`, error)
             }
@@ -241,9 +227,13 @@ export async function POST(request: NextRequest) {
           createdAt: new Date().toISOString(),
           engagement: { likes: 0, retweets: 0, replies: 0 }
         }
-        tweets.push(newTweet)
-        await saveTweets(tweets)
-        return NextResponse.json({ success: true, tweet: newTweet, message: "Tweet saved successfully" })
+
+        const saved = await vercelTweetStorage.saveTweet(newTweet)
+        if (saved) {
+          return NextResponse.json({ success: true, tweet: newTweet, message: "Tweet saved successfully" })
+        } else {
+          return NextResponse.json({ error: "Failed to save tweet - duplicate detected" }, { status: 400 })
+        }
       default:
         return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }

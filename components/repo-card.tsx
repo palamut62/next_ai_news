@@ -4,16 +4,18 @@ import { Card, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { GitHubRepo } from "@/lib/types"
-import { Star, GitFork, ExternalLink, MessageSquare, Calendar, TrendingUp } from "lucide-react"
+import { Star, GitFork, ExternalLink, MessageSquare, Calendar, TrendingUp, X } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
 interface RepoCardProps {
   repo: GitHubRepo & { trendingScore?: number }
   onGenerateTweet?: (repo: GitHubRepo) => void
+  onRejectRepo?: (repo: GitHubRepo) => void
   isGenerating?: boolean
+  isRejecting?: boolean
 }
 
-export function RepoCard({ repo, onGenerateTweet, isGenerating }: RepoCardProps) {
+export function RepoCard({ repo, onGenerateTweet, onRejectRepo, isGenerating, isRejecting }: RepoCardProps) {
   const getLanguageColor = (language: string) => {
     const colors: Record<string, string> = {
       JavaScript: "#f1e05a",
@@ -79,15 +81,26 @@ export function RepoCard({ repo, onGenerateTweet, isGenerating }: RepoCardProps)
               <TrendingUp className="h-3 w-3 mr-1" />
               Trending
             </Badge>
-            <Button
-              size="sm"
-              onClick={() => onGenerateTweet?.(repo)}
-              disabled={isGenerating}
-              className="bg-primary hover:bg-primary/90"
-            >
-              <MessageSquare className="h-4 w-4 mr-2" />
-              {isGenerating ? "Generating..." : "Generate Tweet"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => onGenerateTweet?.(repo)}
+                disabled={isGenerating}
+                className="bg-primary hover:bg-primary/90"
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                {isGenerating ? "Generating..." : "Generate Tweet"}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => onRejectRepo?.(repo)}
+                disabled={isRejecting}
+              >
+                <X className="h-4 w-4 mr-2" />
+                {isRejecting ? "Rejecting..." : "Reject"}
+              </Button>
+            </div>
           </div>
         </div>
       </CardHeader>

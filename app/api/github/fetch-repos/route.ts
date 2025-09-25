@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 // import { checkAuth } from "@/lib/auth"
 // import { isDuplicateGitHubRepository } from "@/lib/tweet-storage"
+import { filterRejectedGitHubRepos } from "@/lib/rejected-github-repos"
 
 interface GitHubRepo {
   id: string
@@ -225,21 +226,28 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔄 After duplicate removal: ${uniqueRepos.length} unique repositories`)
 
+    // Filter out rejected repositories
+    const filteredResult = await filterRejectedGitHubRepos(uniqueRepos)
+    const nonRejectedRepos = filteredResult.repos
+
     // Sort by popularity score
-    const finalRepos = uniqueRepos
+    const finalRepos = nonRejectedRepos
       .sort((a, b) => (b.popularityScore || 0) - (a.popularityScore || 0))
       .slice(0, count)
 
     console.log(`🎯 Returning ${finalRepos.length} repositories`)
     console.log(`🏆 Top repo: ${finalRepos[0]?.fullName} (${finalRepos[0]?.stars} stars)`)
+    console.log(`🚫 Filtered out ${filteredResult.rejectedCount} rejected repositories`)
 
     return Response.json({
       success: true,
       repos: finalRepos,
       totalFound: finalRepos.length,
+      rejectedCount: filteredResult.rejectedCount,
       filters: {
         totalProcessed: allTrendingRepos.length,
         duplicatesRemoved: allTrendingRepos.length - uniqueRepos.length,
+        rejectedRemoved: filteredResult.rejectedCount,
         message: `Fetched trending repositories from multiple strategies: monthly stars, forks, and language trends`
       }
     })

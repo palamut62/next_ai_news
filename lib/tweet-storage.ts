@@ -34,19 +34,25 @@ class TweetStorage {
   private readonly postedTweetsPath: string
   private readonly deletedTweetsPath: string
   private readonly statsPath: string
+  private postedTweetsCache: any[] = []
+  private deletedTweetsCache: any[] = []
+  private statsCache: TweetStats | null = null
+  private cacheLoaded = false
 
   constructor() {
-    this.postedTweetsPath = path.join(process.cwd(), 'data', 'posted-tweets.json')
-    this.deletedTweetsPath = path.join(process.cwd(), 'data', 'deleted-tweets.json')
-    this.statsPath = path.join(process.cwd(), 'data', 'tweet-stats.json')
+    // Use temporary directory for Vercel compatibility
+    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
+    this.postedTweetsPath = path.join(tmpDir, 'posted-tweets.json')
+    this.deletedTweetsPath = path.join(tmpDir, 'deleted-tweets.json')
+    this.statsPath = path.join(tmpDir, 'tweet-stats.json')
   }
 
   private async ensureDataDirectory(): Promise<void> {
-    const dataDir = path.join(process.cwd(), 'data')
+    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
     try {
-      await fs.access(dataDir)
+      await fs.access(tmpDir)
     } catch {
-      await fs.mkdir(dataDir, { recursive: true })
+      await fs.mkdir(tmpDir, { recursive: true })
     }
   }
 

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import type { GitHubRepo } from "@/lib/types"
-import { Search, RefreshCw, Github, TrendingUp } from "lucide-react"
+import { Search, RefreshCw, Github, TrendingUp, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export default function GitHubPage() {
@@ -20,6 +20,7 @@ export default function GitHubPage() {
   const [sortBy, setSortBy] = useState<string>("stars")
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [generatingTweets, setGeneratingTweets] = useState<Set<string>>(new Set())
+  const [rejectingRepos, setRejectingRepos] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   // Fetch repositories on page load
@@ -100,6 +101,44 @@ export default function GitHubPage() {
 
   const handleRefresh = () => {
     fetchGitHubRepos(false)
+  }
+
+  const handleRejectRepo = async (repo: GitHubRepo) => {
+    setRejectingRepos((prev) => new Set(prev).add(repo.id))
+    try {
+      const response = await fetch(`/api/github/reject-repo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ repo })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Remove the repository from the list
+        setRepos(prev => prev.filter(r => r.id !== repo.id))
+        toast({
+          title: "Repository rejected",
+          description: `Repository "${repo.fullName}" has been rejected and won't appear again.`,
+        })
+      } else {
+        throw new Error(data.error || "Failed to reject repository")
+      }
+    } catch (error) {
+      console.error("Reject repository error:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to reject repository. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setRejectingRepos((prev) => {
+        const newSet = new Set(prev)
+        newSet.delete(repo.id)
+        return newSet
+      })
+    }
   }
 
   const handleGenerateTweet = async (repo: GitHubRepo) => {
@@ -280,7 +319,9 @@ export default function GitHubPage() {
                   key={repo.id}
                   repo={repo}
                   onGenerateTweet={handleGenerateTweet}
+                  onRejectRepo={handleRejectRepo}
                   isGenerating={generatingTweets.has(repo.id)}
+                  isRejecting={rejectingRepos.has(repo.id)}
                 />
               ))
             )}
