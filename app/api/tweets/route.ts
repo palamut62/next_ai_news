@@ -194,10 +194,22 @@ export async function POST(request: NextRequest) {
         }
         break
       case "delete":
-        // Delete tweet
+        // Delete tweet permanently from storage
         if (tweetIds && Array.isArray(tweetIds)) {
+          for (const id of tweetIds) {
+            try {
+              await supabaseStorage.deleteTweet(id)
+            } catch (error) {
+              console.error(`Failed to delete tweet ${id}:`, error)
+            }
+          }
           tweets = tweets.filter(tweet => !tweetIds.includes(tweet.id))
         } else if (tweetId) {
+          try {
+            await supabaseStorage.deleteTweet(tweetId)
+          } catch (error) {
+            console.error(`Failed to delete tweet ${tweetId}:`, error)
+          }
           tweets = tweets.filter(tweet => tweet.id !== tweetId)
         }
         break

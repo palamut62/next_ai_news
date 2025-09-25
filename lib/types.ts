@@ -100,6 +100,7 @@ export interface Settings {
     temperature: number
     maxTokens: number
   }
+  apiUrl: string
 }
 
 export interface Notification {

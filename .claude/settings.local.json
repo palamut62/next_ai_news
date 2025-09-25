@@ -9,7 +9,9 @@
       "Bash(taskkill:*)",
       "Bash(npm install:*)",
       "Bash(vercel logs:*)",
-      "Bash(vercel:*)"
+      "Bash(vercel:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

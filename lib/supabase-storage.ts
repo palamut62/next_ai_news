@@ -351,6 +351,26 @@ class SupabaseStorage {
       return false
     }
   }
+
+  async deleteTweet(tweetId: string): Promise<boolean> {
+    try {
+      const { error } = await this.supabase
+        .from('tweets')
+        .delete()
+        .eq('id', tweetId)
+
+      if (error) {
+        console.error('Supabase delete tweet error:', error)
+        return false
+      }
+
+      console.log(`✅ Tweet deleted from Supabase: ${tweetId}`)
+      return true
+    } catch (error) {
+      console.error('Failed to delete tweet from Supabase:', error)
+      return false
+    }
+  }
 }
 
 // Export singleton instance

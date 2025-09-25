@@ -191,21 +191,30 @@ export default function TweetsPage() {
       const response = await fetch('/api/tweets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reject', tweetId: id })
+        body: JSON.stringify({ action: 'delete', tweetId: id })
       })
 
       if (response.ok) {
-        // After rejecting, switch to the 'rejected' view and refresh so the tweet
-        // is removed from the pending list and appears under Rejected.
-        setStatusFilter('rejected')
         fetchTweets()
         toast({
           title: 'Tweet Rejected',
-          description: 'The tweet was moved to Rejected.',
+          description: 'The tweet was permanently deleted.',
+        })
+      } else {
+        const error = await response.json()
+        toast({
+          title: 'Rejection Failed',
+          description: error.error || 'Failed to delete tweet',
+          variant: 'destructive',
         })
       }
     } catch (error) {
       console.error("Failed to reject tweet:", error)
+      toast({
+        title: 'Network Error',
+        description: 'Failed to reject tweet. Please try again.',
+        variant: 'destructive',
+      })
     }
   }
 

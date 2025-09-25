@@ -26,6 +26,7 @@ const initialSettings: Settings = {
     requireApproval: true,
     rateLimitDelay: 30,
   },
+  apiUrl: "https://ai-news-tweet-app.vercel.app",
   github: {
     enabled: true,
     languages: ["JavaScript", "Python", "TypeScript"],
@@ -598,6 +599,21 @@ export default function SettingsPage() {
                     value={[settings!.ai.temperature]}
                     onValueChange={([value]) => updateSettings("ai", "temperature", value)}
                   />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="api-url">API URL</Label>
+                  <Input
+                    id="api-url"
+                    value={settings!.apiUrl}
+                    onChange={(e) => {
+                      setSettings(prev => prev ? { ...prev, apiUrl: e.target.value } : prev)
+                    }}
+                    placeholder="https://your-app.vercel.app"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Your deployed application URL (used for internal API calls)
+                  </p>
                 </div>
               </div>
             </SettingsSection>
