@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { checkAuth, requireAuth } from "@/lib/auth"
+import { supabaseStorage } from "@/lib/supabase-storage"
 import fs from "fs/promises"
 import path from "path"
 
@@ -101,9 +102,19 @@ export async function GET(request: NextRequest) {
   // if (!checkAuth(request)) return requireAuth()
 
   try {
-  const settings = await readSettings();
-  console.log('GET settings from file:', settings, 'File path:', SETTINGS_FILE);
-  return NextResponse.json(settings);
+    // Try to get settings from Supabase first
+    const settings = await supabaseStorage.getSettings();
+
+    if (settings) {
+      console.log('✅ Settings loaded from Supabase');
+      return NextResponse.json(settings);
+    }
+
+    // Fallback to file-based settings if Supabase fails
+    console.log('⚠️ Falling back to file-based settings');
+    const fallbackSettings = await readSettings();
+    console.log('GET settings from file:', fallbackSettings, 'File path:', SETTINGS_FILE);
+    return NextResponse.json(fallbackSettings);
   } catch (err) {
     console.error('Error reading settings:', err);
     return NextResponse.json({ error: 'Failed to read settings' }, { status: 500 });
@@ -123,6 +134,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid settings data' }, { status: 400 });
     }
 
+    // Try to save to Supabase first
+    const supabaseSaved = await supabaseStorage.saveSettings(update);
+
+    if (supabaseSaved) {
+      console.log('✅ Settings saved to Supabase');
+      return NextResponse.json(update);
+    }
+
+    // Fallback to file-based storage if Supabase fails
+    console.log('⚠️ Falling back to file-based settings storage');
     const current = await readSettings();
 
     // Deep merge update into current settings so nested keys aren't wiped
@@ -135,7 +156,7 @@ export async function POST(request: NextRequest) {
 
     await fs.mkdir(path.dirname(SETTINGS_FILE), { recursive: true });
     await fs.writeFile(SETTINGS_FILE, JSON.stringify(merged, null, 2));
-    console.log('Settings saved:', merged);
+    console.log('Settings saved to file:', merged);
 
     return NextResponse.json(merged);
   } catch (err) {

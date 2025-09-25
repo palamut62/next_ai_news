@@ -50,6 +50,58 @@ export interface RejectedGitHubRepoRecord {
   hash: string
 }
 
+// Settings interface
+export interface SettingsRecord {
+  id: string
+  automation: {
+    enabled: boolean
+    checkInterval: number
+    maxArticlesPerCheck: number
+    minAiScore: number
+    autoPost: boolean
+    requireApproval: boolean
+    rateLimitDelay: number
+  }
+  github: {
+    enabled: boolean
+    languages: string[]
+    timeRange: string
+    maxRepos: number
+    minStars: number
+  }
+  notifications: {
+    telegram: {
+      enabled: boolean
+      botToken: string
+      chatId: string
+    }
+    email: {
+      enabled: boolean
+      smtpHost: string
+      smtpPort: number
+      username: string
+      password: string
+      fromEmail: string
+      toEmail: string
+    }
+  }
+  twitter: {
+    apiKey: string
+    apiSecret: string
+    accessToken: string
+    accessTokenSecret: string
+  }
+  ai: {
+    provider: string
+    apiKey: string
+    model: string
+    temperature: number
+    maxTokens: number
+  }
+  apiUrl: string
+  updated_at: string
+}
+
 class SupabaseStorage {
   private supabase: SupabaseClient
 
@@ -369,6 +421,65 @@ class SupabaseStorage {
     } catch (error) {
       console.error('Failed to delete tweet from Supabase:', error)
       return false
+    }
+  }
+
+  // Settings operations
+  async saveSettings(settings: any): Promise<boolean> {
+    try {
+      const settingsRecord: SettingsRecord = {
+        id: 'default', // Use a fixed ID for single settings record
+        ...settings,
+        updated_at: new Date().toISOString()
+      }
+
+      const { error } = await this.supabase
+        .from('settings')
+        .upsert(settingsRecord, { onConflict: 'id' })
+
+      if (error) {
+        console.error('Supabase save settings error:', error)
+        return false
+      }
+
+      console.log('✅ Settings saved to Supabase')
+      return true
+    } catch (error) {
+      console.error('Failed to save settings to Supabase:', error)
+      return false
+    }
+  }
+
+  async getSettings(): Promise<any | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from('settings')
+        .select('*')
+        .eq('id', 'default')
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No settings found, return null
+          console.log('No settings found in Supabase')
+          return null
+        }
+        console.error('Supabase get settings error:', error)
+        return null
+      }
+
+      if (!data) {
+        console.log('No settings data found')
+        return null
+      }
+
+      // Remove internal fields before returning
+      const { id, updated_at, ...settings } = data
+      console.log('✅ Settings loaded from Supabase')
+      return settings
+    } catch (error) {
+      console.error('Failed to get settings from Supabase:', error)
+      return null
     }
   }
 }
