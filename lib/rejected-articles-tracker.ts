@@ -14,10 +14,25 @@ interface RejectedArticle {
 }
 
 class RejectedArticlesTracker {
-  private readonly REJECTED_FILE = path.join(process.cwd(), 'data', 'rejected-articles.json')
+  private readonly REJECTED_FILE: string
   private rejectedCache: Map<string, RejectedArticle> = new Map()
   private lastCacheUpdate = 0
   private readonly CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+
+  constructor() {
+    // Use temporary directory for Vercel compatibility
+    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
+    this.REJECTED_FILE = path.join(tmpDir, 'rejected-articles.json')
+  }
+
+  private async ensureDataDirectory(): Promise<void> {
+    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
+    try {
+      await fs.access(tmpDir)
+    } catch {
+      await fs.mkdir(tmpDir, { recursive: true })
+    }
+  }
 
   async loadRejectedArticles(): Promise<Map<string, RejectedArticle>> {
     try {
@@ -26,7 +41,7 @@ class RejectedArticlesTracker {
         return this.rejectedCache
       }
 
-      await fs.mkdir(path.dirname(this.REJECTED_FILE), { recursive: true })
+      await this.ensureDataDirectory()
       const data = await fs.readFile(this.REJECTED_FILE, 'utf-8')
       const articles: RejectedArticle[] = JSON.parse(data)
 
@@ -44,7 +59,7 @@ class RejectedArticlesTracker {
 
   async saveRejectedArticles(articles: Map<string, RejectedArticle>): Promise<void> {
     try {
-      await fs.mkdir(path.dirname(this.REJECTED_FILE), { recursive: true })
+      await this.ensureDataDirectory()
       const data = Array.from(articles.values())
       await fs.writeFile(this.REJECTED_FILE, JSON.stringify(data, null, 2))
 

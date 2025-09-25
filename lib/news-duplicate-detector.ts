@@ -22,10 +22,25 @@ interface ProcessedArticle extends NewsArticle {
 }
 
 class NewsDuplicateDetector {
-  private readonly ARTICLES_FILE = path.join(process.cwd(), 'data', 'processed-articles.json')
+  private readonly ARTICLES_FILE: string
   private articlesCache: Map<string, ProcessedArticle> = new Map()
   private lastCacheUpdate = 0
   private readonly CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+
+  constructor() {
+    // Use temporary directory for Vercel compatibility
+    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
+    this.ARTICLES_FILE = path.join(tmpDir, 'processed-articles.json')
+  }
+
+  private async ensureDataDirectory(): Promise<void> {
+    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
+    try {
+      await fs.access(tmpDir)
+    } catch {
+      await fs.mkdir(tmpDir, { recursive: true })
+    }
+  }
 
   async loadArticles(): Promise<Map<string, ProcessedArticle>> {
     try {
@@ -34,7 +49,7 @@ class NewsDuplicateDetector {
         return this.articlesCache
       }
 
-      await fs.mkdir(path.dirname(this.ARTICLES_FILE), { recursive: true })
+      await this.ensureDataDirectory()
       const data = await fs.readFile(this.ARTICLES_FILE, 'utf-8')
       const articles: ProcessedArticle[] = JSON.parse(data)
 
@@ -52,7 +67,7 @@ class NewsDuplicateDetector {
 
   async saveArticles(articles: Map<string, ProcessedArticle>): Promise<void> {
     try {
-      await fs.mkdir(path.dirname(this.ARTICLES_FILE), { recursive: true })
+      await this.ensureDataDirectory()
       const data = Array.from(articles.values())
       await fs.writeFile(this.ARTICLES_FILE, JSON.stringify(data, null, 2))
 
