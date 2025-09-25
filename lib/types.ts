@@ -10,6 +10,7 @@ export interface Tweet {
   newsDate?: string
   scheduledAt?: string
   postedAt?: string
+  rejectedAt?: string
   twitterId?: string
   postError?: string | null
   engagement?: {

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
+import { isTweetRejected } from "@/lib/rejected-tweets-storage"
 import fs from "fs/promises"
 import path from "path"
 
@@ -54,8 +55,36 @@ export async function POST(request: NextRequest) {
       existingTweets = []
     }
 
+    // Filter out tweets that have been rejected
+    const filteredTweets = []
+    const skippedRejected = []
+    const skippedDuplicates = []
+
+    for (const tweet of tweets) {
+      // Check if tweet has been rejected
+      const isRejected = await isTweetRejected(tweet.content, tweet.sourceTitle)
+
+      if (isRejected) {
+        skippedRejected.push(tweet)
+        continue
+      }
+
+      // Check for duplicates in existing tweets
+      const isDuplicate = existingTweets.some(existingTweet =>
+        existingTweet.content === tweet.content &&
+        existingTweet.sourceTitle === tweet.sourceTitle
+      )
+
+      if (isDuplicate) {
+        skippedDuplicates.push(tweet)
+        continue
+      }
+
+      filteredTweets.push(tweet)
+    }
+
     // Add new tweets
-    const newTweets = tweets.map(tweet => ({
+    const newTweets = filteredTweets.map(tweet => ({
       ...tweet,
       id: `news_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
       createdAt: new Date().toISOString()
@@ -71,6 +100,8 @@ export async function POST(request: NextRequest) {
       saved: newTweets.length,
       total: existingTweets.length,
       savedTweets: newTweets,
+      skippedRejected: skippedRejected.length,
+      skippedDuplicates: skippedDuplicates.length,
       savedAt: new Date().toISOString()
     })
 

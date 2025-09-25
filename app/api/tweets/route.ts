@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { checkAuth, requireAuth } from "@/lib/auth"
 import { postTweetToTwitter } from "@/lib/twitter-client"
 import { savePostedTweet } from "@/lib/tweet-storage"
+import { addRejectedTweet } from "@/lib/rejected-tweets-storage"
 import fs from "fs/promises"
 import path from "path"
 import type { Tweet } from "@/lib/types"
@@ -175,14 +176,34 @@ export async function POST(request: NextRequest) {
         }
         break
       case "reject":
-        // Update tweet status to rejected
+        // Update tweet status to rejected and store for duplicate checking
         if (tweetIds && Array.isArray(tweetIds)) {
+          const tweetsToReject = tweets.filter(tweet => tweetIds.includes(tweet.id))
+
+          // Store rejected tweets for duplicate checking
+          for (const tweet of tweetsToReject) {
+            try {
+              await addRejectedTweet(tweet)
+            } catch (error) {
+              console.error(`Failed to store rejected tweet ${tweet.id}:`, error)
+            }
+          }
+
           tweets = tweets.map(tweet =>
-            tweetIds.includes(tweet.id) ? { ...tweet, status: "rejected" } : tweet
+            tweetIds.includes(tweet.id) ? { ...tweet, status: "rejected", rejectedAt: new Date().toISOString() } : tweet
           )
         } else if (tweetId) {
+          const tweetToReject = tweets.find(tweet => tweet.id === tweetId)
+          if (tweetToReject) {
+            try {
+              await addRejectedTweet(tweetToReject)
+            } catch (error) {
+              console.error(`Failed to store rejected tweet ${tweetId}:`, error)
+            }
+          }
+
           tweets = tweets.map(tweet =>
-            tweet.id === tweetId ? { ...tweet, status: "rejected" } : tweet
+            tweet.id === tweetId ? { ...tweet, status: "rejected", rejectedAt: new Date().toISOString() } : tweet
           )
         }
         break

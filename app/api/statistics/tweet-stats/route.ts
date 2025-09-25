@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { getTweetStats, getRecentActivity } from "@/lib/tweet-storage"
+import { getRejectedTweetsStats } from "@/lib/rejected-tweets-storage"
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,6 +16,9 @@ export async function GET(request: NextRequest) {
     // Get basic statistics
     const stats = await getTweetStats()
 
+    // Get rejected tweets statistics
+    const rejectedStats = await getRejectedTweetsStats()
+
     const response: any = {
       success: true,
       stats: {
@@ -22,6 +26,10 @@ export async function GET(request: NextRequest) {
         totalPosted: stats.totalPosted,
         totalDeleted: stats.totalDeleted,
         totalDuplicates: stats.totalDuplicates,
+        totalRejected: rejectedStats.total,
+        rejectedToday: rejectedStats.today,
+        rejectedThisWeek: rejectedStats.thisWeek,
+        rejectedThisMonth: rejectedStats.thisMonth,
         bySource: stats.bySource,
         lastUpdated: stats.lastUpdated
       }

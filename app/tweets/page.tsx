@@ -195,7 +195,14 @@ export default function TweetsPage() {
       })
 
       if (response.ok) {
+        // After rejecting, switch to the 'rejected' view and refresh so the tweet
+        // is removed from the pending list and appears under Rejected.
+        setStatusFilter('rejected')
         fetchTweets()
+        toast({
+          title: 'Tweet Rejected',
+          description: 'The tweet was moved to Rejected.',
+        })
       }
     } catch (error) {
       console.error("Failed to reject tweet:", error)
@@ -279,19 +286,39 @@ export default function TweetsPage() {
 
   const handleBulkReject = async () => {
     try {
-      const response = await fetch('/api/tweets', {
+      const response = await fetch('/api/tweets/bulk-reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reject', tweetIds: selectedTweets })
+        body: JSON.stringify({ tweetIds: selectedTweets })
       })
 
       if (response.ok) {
+        const data = await response.json()
+        // After bulk reject, switch to rejected view so the rejected items are visible
+        // and removed from the pending list.
         setSelectedTweets([])
         setBulkActionsVisible(false)
+        setStatusFilter('rejected')
         fetchTweets()
+        toast({
+          title: "Bulk Rejection Successful",
+          description: `${data.rejectedCount || selectedTweets.length} tweets rejected and stored for duplicate checking`,
+        })
+      } else {
+        const error = await response.json()
+        toast({
+          title: "Bulk Rejection Failed",
+          description: error.error || "An error occurred",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Failed to bulk reject tweets:", error)
+      toast({
+        title: "Network Error",
+        description: "Failed to bulk reject tweets. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 

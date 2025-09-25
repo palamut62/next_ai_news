@@ -23,7 +23,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
-import { MessageSquare, TrendingUp, CheckCircle, Heart, Repeat, MessageCircle, Target, RefreshCw } from "lucide-react"
+import { MessageSquare, TrendingUp, CheckCircle, Heart, Repeat, MessageCircle, Target, RefreshCw, XCircle } from "lucide-react"
 import { useState, useEffect } from "react"
 
 // All mock data removed - using real data from API only
@@ -46,6 +46,10 @@ export default function StatisticsPage() {
     totalPosted: tweetStats?.totalPosted || 0,
     totalDeleted: tweetStats?.totalDeleted || 0,
     totalDuplicates: tweetStats?.totalDuplicates || 0,
+    totalRejected: tweetStats?.totalRejected || 0,
+    rejectedToday: tweetStats?.rejectedToday || 0,
+    rejectedThisWeek: tweetStats?.rejectedThisWeek || 0,
+    rejectedThisMonth: tweetStats?.rejectedThisMonth || 0,
     successRate: tweetStats?.totalProcessed ? Math.round((tweetStats.totalPosted / tweetStats.totalProcessed) * 100) : 0,
     lastUpdated: tweetStats?.lastUpdated || null,
   }
@@ -132,7 +136,7 @@ export default function StatisticsPage() {
           ) : (
             <>
           {/* Key Metrics */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
             <StatsCard
               title="Total Processed"
               value={stats.totalTweets}
@@ -144,6 +148,12 @@ export default function StatisticsPage() {
               value={stats.totalPosted}
               description="To Twitter"
               icon={CheckCircle}
+            />
+            <StatsCard
+              title="Total Rejected"
+              value={stats.totalRejected}
+              description="Rejected tweets"
+              icon={XCircle}
             />
             <StatsCard
               title="Success Rate"
