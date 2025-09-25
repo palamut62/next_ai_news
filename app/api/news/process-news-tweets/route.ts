@@ -1,9 +1,15 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
+import { logAPIEvent } from "@/lib/audit-logger"
 
 export async function POST(request: NextRequest) {
   try {
-    if (!checkAuth(request)) {
+    const auth = await checkAuth(request)
+    if (!auth.authenticated) {
+      await logAPIEvent('process_news_auth_failure', false, request, {
+        url: request.url,
+        method: request.method
+      })
       return Response.json({ error: "Authentication required" }, { status: 401 })
     }
 

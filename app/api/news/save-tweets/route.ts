@@ -3,6 +3,7 @@ import { checkAuth } from "@/lib/auth"
 import { isTweetRejected } from "@/lib/rejected-tweets-storage"
 import fs from "fs/promises"
 import path from "path"
+import { logAPIEvent } from "@/lib/audit-logger"
 
 interface Tweet {
   id: string
@@ -28,7 +29,12 @@ interface Tweet {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!checkAuth(request)) {
+    const auth = await checkAuth(request)
+    if (!auth.authenticated) {
+      await logAPIEvent('save_tweets_auth_failure', false, request, {
+        url: request.url,
+        method: request.method
+      })
       return Response.json({ error: "Authentication required" }, { status: 401 })
     }
 
@@ -95,6 +101,15 @@ export async function POST(request: NextRequest) {
     // Save back to file
     await fs.writeFile(tweetsFile, JSON.stringify(existingTweets, null, 2))
 
+    // Log successful save operation
+    await logAPIEvent('save_tweets_success', true, request, {
+      savedCount: newTweets.length,
+      totalCount: existingTweets.length,
+      skippedRejected: skippedRejected.length,
+      skippedDuplicates: skippedDuplicates.length,
+      userEmail: auth.email
+    })
+
     return Response.json({
       success: true,
       saved: newTweets.length,
@@ -107,13 +122,22 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error("Save tweets from news error:", error)
+    await logAPIEvent('save_tweets_error', false, request, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      tweetsCount: tweets?.length
+    })
     return Response.json({ error: "Failed to save tweets from news" }, { status: 500 })
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    if (!checkAuth(request)) {
+    const auth = await checkAuth(request)
+    if (!auth.authenticated) {
+      await logAPIEvent('get_tweets_auth_failure', false, request, {
+        url: request.url,
+        method: request.method
+      })
       return Response.json({ error: "Authentication required" }, { status: 401 })
     }
 
@@ -142,6 +166,9 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error("Get news tweets error:", error)
+    await logAPIEvent('get_tweets_error', false, request, {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
     return Response.json({ error: "Failed to get news tweets" }, { status: 500 })
   }
 }

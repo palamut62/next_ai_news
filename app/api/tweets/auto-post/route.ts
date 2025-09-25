@@ -2,10 +2,16 @@ import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { autoPostTweets } from "@/lib/tweet-scheduler"
 import type { Tweet } from "@/lib/types"
+import { logAPIEvent, logTweetEvent } from "@/lib/audit-logger"
 
 export async function POST(request: NextRequest) {
   try {
-    if (!checkAuth(request)) {
+    const auth = await checkAuth(request)
+    if (!auth.authenticated) {
+      await logAPIEvent('auto_post_auth_failure', false, request, {
+        url: request.url,
+        method: request.method
+      })
       return Response.json({ error: "Authentication required" }, { status: 401 })
     }
 
@@ -42,6 +48,15 @@ export async function POST(request: NextRequest) {
 
     const results = await autoPostTweets(validatedTweets, validSettings)
 
+    // Log auto-post results
+    await logTweetEvent('tweet_posted', results.success > 0, request, {
+      autoPost: true,
+      successCount: results.success,
+      failedCount: results.failed,
+      errors: results.errors,
+      userEmail: auth.email
+    })
+
     return Response.json({
       success: true,
       message: `Auto-post completed: ${results.success} tweets posted, ${results.failed} failed`,
@@ -50,6 +65,10 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error("Auto-post error:", error)
+    await logAPIEvent('auto_post_error', false, request, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      tweetsCount: tweets?.length
+    })
     return Response.json({ error: "Server error" }, { status: 500 })
   }
 }

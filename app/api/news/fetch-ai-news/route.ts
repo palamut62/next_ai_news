@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
-import { isDuplicateArticle } from "@/lib/tweet-storage"
+import { checkAndFilterNewsArticles, markNewsArticlesProcessed } from "@/lib/news-duplicate-detector"
+import { logAPIEvent } from "@/lib/audit-logger"
 
 // Simple fetch with timeout helper
 async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeout = 20000) {
@@ -29,10 +30,14 @@ interface NewsArticle {
 
 export async function POST(request: NextRequest) {
   try {
-    // Temporarily disable authentication for testing
-    // if (!checkAuth(request)) {
-    //   return Response.json({ error: "Authentication required" }, { status: 401 })
-    // }
+    const auth = await checkAuth(request)
+    if (!auth.authenticated) {
+      await logAPIEvent('fetch_news_auth_failure', false, request, {
+        url: request.url,
+        method: request.method
+      })
+      return Response.json({ error: "Authentication required" }, { status: 401 })
+    }
 
     const { count = 10 } = await request.json()
 
@@ -193,16 +198,22 @@ export async function POST(request: NextRequest) {
 
       if (!hasAIKeyword) continue
 
-      // Check for duplicates
-      const duplicateCheck = await isDuplicateArticle({
+      // Check for duplicates using the new advanced system
+      const duplicateCheck = await newsDuplicateDetector.isDuplicate({
         title: article.title,
         url: article.url,
+        source: article.source.name,
+        publishedAt: article.publishedAt,
         description: article.description
+      }, {
+        titleSimilarity: 0.8,  // 80% title similarity threshold
+        contentSimilarity: 0.6, // 60% content similarity threshold
+        timeWindow: 48 // 48 hours time window
       })
 
       if (duplicateCheck.isDuplicate) {
         duplicatesCount++
-        console.log(`🔄 Duplicate detected: "${article.title.substring(0, 50)}..." (${duplicateCheck.reason})`)
+        console.log(`🔄 Duplicate detected: "${article.title.substring(0, 50)}..." (${duplicateCheck.reason}, similarity: ${(duplicateCheck.similarity * 100).toFixed(1)}%)`)
         continue
       }
 
@@ -211,16 +222,46 @@ export async function POST(request: NextRequest) {
 
     console.log(`📊 Filtered ${articles.length} articles down to ${filteredArticles.length} unique articles (duplicates skipped: ${duplicatesCount})`)
 
+    // Mark processed articles to prevent future duplicates
+    if (filteredArticles.length > 0) {
+      try {
+        await markNewsArticlesProcessed(filteredArticles.map(article => ({
+          title: article.title,
+          url: article.url,
+          source: article.source.name,
+          publishedAt: article.publishedAt,
+          description: article.description
+        })))
+        console.log(`✅ Marked ${filteredArticles.length} articles as processed for duplicate detection`)
+      } catch (markError) {
+        console.error('⚠️ Failed to mark articles as processed:', markError)
+      }
+    }
+
+    // Log successful fetch
+    await logAPIEvent('fetch_news_success', true, request, {
+      totalArticles: articles.length,
+      uniqueArticles: filteredArticles.length,
+      duplicatesSkipped: duplicatesCount,
+      sources: [...new Set(filteredArticles.map(a => a.source.name))],
+      userEmail: auth.email
+    })
+
     return Response.json({
       success: true,
       articles: filteredArticles,
       count: filteredArticles.length,
+      duplicatesSkipped: duplicatesCount,
       fetchedAt: new Date().toISOString(),
       isRealData: process.env.NEWS_API_KEY ? true : false
     })
 
   } catch (error) {
     console.error("Fetch AI news error:", error)
+    await logAPIEvent('fetch_news_error', false, request, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      requestedCount: count
+    })
     return Response.json({ error: "Failed to fetch AI news" }, { status: 500 })
   }
 }
