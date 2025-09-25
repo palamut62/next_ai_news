@@ -7,7 +7,9 @@
       "Bash(curl:*)",
       "Bash(del:*)",
       "Bash(taskkill:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(vercel logs:*)",
+      "Bash(vercel:*)"
     ],
     "deny": [],
     "ask": []
