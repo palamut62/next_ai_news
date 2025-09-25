@@ -6,7 +6,8 @@
       "Bash(node:*)",
       "Bash(curl:*)",
       "Bash(del:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

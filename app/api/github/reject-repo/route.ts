@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
-import { addRejectedGitHubRepo } from "@/lib/rejected-github-repos"
+import { supabaseStorage } from "@/lib/supabase-storage"
 import { logAPIEvent } from "@/lib/audit-logger"
 
 export async function POST(request: NextRequest) {
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Add to rejected repositories
-    await addRejectedGitHubRepo({
+    await supabaseStorage.addRejectedGitHubRepo({
       fullName: repo.fullName,
       url: repo.url,
       name: repo.name,

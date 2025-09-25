@@ -1,12 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { checkAuth, requireAuth } from "@/lib/auth"
 import { postTweetToTwitter } from "@/lib/twitter-client"
-import { vercelTweetStorage } from "@/lib/vercel-tweet-storage"
+import { supabaseStorage } from "@/lib/supabase-storage"
 import type { Tweet } from "@/lib/types"
 
 async function getTweets(): Promise<Tweet[]> {
   try {
-    return await vercelTweetStorage.getAllTweets()
+    return await supabaseStorage.getAllTweets()
   } catch (error) {
     console.error("Failed to get tweets:", error)
     return []
@@ -15,7 +15,7 @@ async function getTweets(): Promise<Tweet[]> {
 
 async function saveTweets(tweets: Tweet[]): Promise<void> {
   try {
-    // VercelTweetStorage manages its own state
+    // Supabase storage manages its own state
     console.log(`Saving ${tweets.length} tweets to storage`)
   } catch (error) {
     console.error("Failed to save tweets:", error)
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
                   postedAt: new Date().toISOString(),
                   engagement: tweet.engagement || { likes: 0, retweets: 0, replies: 0 }
                 }
-                await vercelTweetStorage.saveTweet(postedTweet)
+                await supabaseStorage.saveTweet(postedTweet)
               } catch (saveErr) {
                 console.error('Failed to save posted tweet (single approve):', saveErr)
               }
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
           // Store rejected tweets for duplicate checking
           for (const tweet of tweetsToReject) {
             try {
-              await vercelTweetStorage.updateTweetStatus(tweet.id, 'rejected')
+              await supabaseStorage.updateTweetStatus(tweet.id, 'rejected')
             } catch (error) {
               console.error(`Failed to store rejected tweet ${tweet.id}:`, error)
             }
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
           const tweetToReject = tweets.find(tweet => tweet.id === tweetId)
           if (tweetToReject) {
             try {
-              await vercelTweetStorage.updateTweetStatus(tweetId, 'rejected')
+              await supabaseStorage.updateTweetStatus(tweetId, 'rejected')
             } catch (error) {
               console.error(`Failed to store rejected tweet ${tweetId}:`, error)
             }
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
           engagement: { likes: 0, retweets: 0, replies: 0 }
         }
 
-        const saved = await vercelTweetStorage.saveTweet(newTweet)
+        const saved = await supabaseStorage.saveTweet(newTweet)
         if (saved) {
           return NextResponse.json({ success: true, tweet: newTweet, message: "Tweet saved successfully" })
         } else {

@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
-import { isDuplicateTechCrunchArticle } from "@/lib/tweet-storage"
-import { filterRejectedArticles } from "@/lib/rejected-articles-tracker"
+import { supabaseStorage } from "@/lib/supabase-storage"
 import Parser from "rss-parser"
 
 export interface TechCrunchArticle {
@@ -65,7 +64,7 @@ export async function POST(request: NextRequest) {
       // Check for duplicates before adding
       console.log(`Checking duplicate for: ${item.title}`)
       try {
-        const isDuplicate = await isDuplicateTechCrunchArticle(item.link)
+        const isDuplicate = await supabaseStorage.isArticleRejected(item.title, item.link)
         if (isDuplicate) {
           console.log(`Skipping duplicate article: ${item.title}`)
           continue
@@ -118,20 +117,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Filter out rejected articles
-    const filteredResult = await filterRejectedArticles(articles)
-    const finalArticles = filteredResult.articles
+    const finalArticles = []
+    let rejectedCount = 0
+
+    for (const article of articles) {
+      const isRejected = await supabaseStorage.isArticleRejected(article.title, article.url)
+      if (!isRejected) {
+        finalArticles.push(article)
+      } else {
+        rejectedCount++
+      }
+    }
 
     // Sort by publication date (newest first)
     finalArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
 
     console.log(`Found ${articles.length} articles from the last ${hours} hours`)
-    console.log(`Filtered out ${filteredResult.rejectedCount} rejected articles`)
+    console.log(`Filtered out ${rejectedCount} rejected articles`)
 
     return Response.json({
       success: true,
       articles: finalArticles,
       totalFound: finalArticles.length,
-      rejectedCount: filteredResult.rejectedCount,
+      rejectedCount: rejectedCount,
       timeRange: `${hours}h`,
       fetchedAt: new Date().toISOString()
     }, { headers: CORS_HEADERS })

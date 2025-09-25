@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 // import { checkAuth } from "@/lib/auth"
 // import { isDuplicateGitHubRepository } from "@/lib/tweet-storage"
-import { filterRejectedGitHubRepos } from "@/lib/rejected-github-repos"
+import { supabaseStorage } from "@/lib/supabase-storage"
 
 interface GitHubRepo {
   id: string
@@ -227,8 +227,17 @@ export async function POST(request: NextRequest) {
     console.log(`🔄 After duplicate removal: ${uniqueRepos.length} unique repositories`)
 
     // Filter out rejected repositories
-    const filteredResult = await filterRejectedGitHubRepos(uniqueRepos)
-    const nonRejectedRepos = filteredResult.repos
+    const nonRejectedRepos = []
+    let rejectedCount = 0
+
+    for (const repo of uniqueRepos) {
+      const isRejected = await supabaseStorage.isGitHubRepoRejected(repo.fullName, repo.url)
+      if (!isRejected) {
+        nonRejectedRepos.push(repo)
+      } else {
+        rejectedCount++
+      }
+    }
 
     // Sort by popularity score
     const finalRepos = nonRejectedRepos
@@ -237,17 +246,17 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎯 Returning ${finalRepos.length} repositories`)
     console.log(`🏆 Top repo: ${finalRepos[0]?.fullName} (${finalRepos[0]?.stars} stars)`)
-    console.log(`🚫 Filtered out ${filteredResult.rejectedCount} rejected repositories`)
+    console.log(`🚫 Filtered out ${rejectedCount} rejected repositories`)
 
     return Response.json({
       success: true,
       repos: finalRepos,
       totalFound: finalRepos.length,
-      rejectedCount: filteredResult.rejectedCount,
+      rejectedCount: rejectedCount,
       filters: {
         totalProcessed: allTrendingRepos.length,
         duplicatesRemoved: allTrendingRepos.length - uniqueRepos.length,
-        rejectedRemoved: filteredResult.rejectedCount,
+        rejectedRemoved: rejectedCount,
         message: `Fetched trending repositories from multiple strategies: monthly stars, forks, and language trends`
       }
     })
