@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import type { TechCrunchArticle } from "@/lib/types"
-import { Search, RefreshCw, ExternalLink, Clock, User, MessageSquare, Calendar } from "lucide-react"
+import { Search, RefreshCw, ExternalLink, Clock, User, MessageSquare, Calendar, X } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 
@@ -21,6 +21,7 @@ export default function TechCrunchPage() {
   const [timeRange, setTimeRange] = useState<string>("24")
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [generatingTweets, setGeneratingTweets] = useState<Set<string>>(new Set())
+  const [rejectingArticles, setRejectingArticles] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   // Fetch articles on page load
@@ -83,6 +84,44 @@ export default function TechCrunchPage() {
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
+    }
+  }
+
+  const handleRejectArticle = async (article: TechCrunchArticle) => {
+    setRejectingArticles((prev) => new Set(prev).add(article.id))
+    try {
+      const response = await fetch(`/api/techcrunch/reject-article`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: 'include',
+        body: JSON.stringify({ article })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Remove the article from the list
+        setArticles(prev => prev.filter(a => a.id !== article.id))
+        toast({
+          title: "Article rejected",
+          description: `Article "${article.title}" has been rejected and won't appear again.`,
+        })
+      } else {
+        throw new Error(data.error || "Failed to reject article")
+      }
+    } catch (error) {
+      console.error("Reject article error:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to reject article. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setRejectingArticles((prev) => {
+        const newSet = new Set(prev)
+        newSet.delete(article.id)
+        return newSet
+      })
     }
   }
 
@@ -301,15 +340,26 @@ export default function TechCrunchPage() {
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleGenerateTweet(article)}
-                          disabled={generatingTweets.has(article.id)}
-                          className="bg-primary hover:bg-primary/90"
-                        >
-                          <MessageSquare className="h-4 w-4 mr-2" />
-                          {generatingTweets.has(article.id) ? "Generating..." : "Generate Tweet"}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleGenerateTweet(article)}
+                            disabled={generatingTweets.has(article.id)}
+                            className="bg-primary hover:bg-primary/90"
+                          >
+                            <MessageSquare className="h-4 w-4 mr-2" />
+                            {generatingTweets.has(article.id) ? "Generating..." : "Generate Tweet"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleRejectArticle(article)}
+                            disabled={rejectingArticles.has(article.id)}
+                          >
+                            <X className="h-4 w-4 mr-2" />
+                            {rejectingArticles.has(article.id) ? "Rejecting..." : "Reject"}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </CardHeader>

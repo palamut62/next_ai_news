@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { isDuplicateTechCrunchArticle } from "@/lib/tweet-storage"
+import { filterRejectedArticles } from "@/lib/rejected-articles-tracker"
 import Parser from "rss-parser"
 
 export interface TechCrunchArticle {
@@ -116,15 +117,21 @@ export async function POST(request: NextRequest) {
       articles.push(article)
     }
 
+    // Filter out rejected articles
+    const filteredResult = await filterRejectedArticles(articles)
+    const finalArticles = filteredResult.articles
+
     // Sort by publication date (newest first)
-    articles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    finalArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
 
     console.log(`Found ${articles.length} articles from the last ${hours} hours`)
+    console.log(`Filtered out ${filteredResult.rejectedCount} rejected articles`)
 
     return Response.json({
       success: true,
-      articles,
-      totalFound: articles.length,
+      articles: finalArticles,
+      totalFound: finalArticles.length,
+      rejectedCount: filteredResult.rejectedCount,
       timeRange: `${hours}h`,
       fetchedAt: new Date().toISOString()
     }, { headers: CORS_HEADERS })
