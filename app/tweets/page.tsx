@@ -400,32 +400,34 @@ export default function TweetsPage() {
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Tweet Management</h1>
-              <p className="text-muted-foreground mt-2">Review and manage AI-generated tweets</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Tweet Management</h1>
+              <p className="text-muted-foreground mt-1 md:mt-2">Review and manage AI-generated tweets</p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center space-x-2">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center justify-center space-x-2">
                 <Switch
                   id="auto-post"
                   checked={autoPost}
                   onCheckedChange={handleAutoPostToggle}
                 />
                 <Label htmlFor="auto-post" className="text-sm">
-                  Auto-post approved tweets
+                  Auto-post
                 </Label>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 <Button
                   onClick={fetchAiNews}
                   disabled={isFetchingNews || loading}
                   variant="outline"
-                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                  className="border-blue-500 text-blue-600 hover:bg-blue-50 text-xs sm:text-sm"
+                  size="sm"
                 >
-                  <Newspaper className={`h-4 w-4 mr-2 ${isFetchingNews ? 'animate-pulse' : ''}`} />
-                  <Download className={`h-3 w-3 mr-1 ${isFetchingNews ? 'animate-bounce' : ''}`} />
-                  {isFetchingNews ? 'Fetching News...' : 'Fetch AI News'}
+                  <Newspaper className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 ${isFetchingNews ? 'animate-pulse' : ''}`} />
+                  <Download className={`h-2 w-2 sm:h-3 sm:w-3 mr-1 ${isFetchingNews ? 'animate-bounce' : ''}`} />
+                  <span className="hidden sm:inline">{isFetchingNews ? 'Fetching News...' : 'Fetch AI News'}</span>
+                  <span className="sm:hidden">{isFetchingNews ? 'Fetching...' : 'News'}</span>
                 </Button>
                 <Button
                   onClick={testRealNews}
@@ -434,44 +436,46 @@ export default function TweetsPage() {
                   className="border-green-500 text-green-600 hover:bg-green-50"
                   size="sm"
                 >
-                  🧪 Test API
+                  🧪 Test
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkActionsVisible(!bulkActionsVisible)}
+                  size="sm"
+                >
+                  <Settings className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                  <span className="hidden sm:inline">Bulk Actions</span>
+                  <span className="sm:inline">Bulk</span>
+                </Button>
+                <Button onClick={fetchTweets} disabled={loading} size="sm">
+                  <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                  {loading ? 'Loading...' : 'Refresh'}
                 </Button>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => setBulkActionsVisible(!bulkActionsVisible)}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Bulk Actions
-              </Button>
-              <Button onClick={fetchTweets} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                {loading ? 'Loading...' : 'Refresh'}
-              </Button>
             </div>
           </div>
 
           {/* Status Overview */}
-          <div className="flex items-center gap-4">
-            <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
+          <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+            <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 text-xs">
               Pending: {statusCounts.pending}
             </Badge>
-            <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
+            <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-xs">
               Approved: {statusCounts.approved}
             </Badge>
-            <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+            <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs">
               Posted: {statusCounts.posted}
             </Badge>
-            <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20">
+            <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-xs">
               Rejected: {statusCounts.rejected}
             </Badge>
           </div>
 
           {/* Bulk Actions Panel */}
           {bulkActionsVisible && (
-            <div className="p-4 bg-muted/50 rounded-lg border border-dashed">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-4">
+            <div className="p-3 md:p-4 bg-muted/50 rounded-lg border border-dashed">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-3 md:mb-4 gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       checked={allPendingSelected}
@@ -479,11 +483,11 @@ export default function TweetsPage() {
                       disabled={pendingTweets.length === 0}
                     />
                     <Label className="text-sm font-medium">
-                      Select All Pending ({pendingTweets.length})
+                      Select All ({pendingTweets.length})
                     </Label>
                   </div>
                   {selectedTweets.length > 0 && (
-                    <Badge variant="secondary">
+                    <Badge variant="secondary" className="text-xs">
                       {selectedTweets.length} selected
                     </Badge>
                   )}
@@ -492,28 +496,29 @@ export default function TweetsPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setBulkActionsVisible(false)}
+                  className="self-end"
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
 
               {selectedTweets.length > 0 && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-2 justify-center md:justify-start">
                   <Button
                     onClick={handleBulkApprove}
                     className="bg-green-500 hover:bg-green-600"
                     size="sm"
                   >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Approve {selectedTweets.length}
+                    <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                    <span className="text-xs sm:text-sm">Approve {selectedTweets.length}</span>
                   </Button>
                   <Button
                     onClick={handleBulkReject}
                     variant="destructive"
                     size="sm"
                   >
-                    <X className="h-4 w-4 mr-2" />
-                    Reject {selectedTweets.length}
+                    <X className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                    <span className="text-xs sm:text-sm">Reject {selectedTweets.length}</span>
                   </Button>
                   {approvedTweets.some(t => selectedTweets.includes(t.id)) && (
                     <Button
@@ -521,8 +526,8 @@ export default function TweetsPage() {
                       className="bg-blue-500 hover:bg-blue-600"
                       size="sm"
                     >
-                      <Send className="h-4 w-4 mr-2" />
-                      Post Now
+                      <Send className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                      <span className="text-xs sm:text-sm">Post Now</span>
                     </Button>
                   )}
                 </div>
@@ -531,7 +536,7 @@ export default function TweetsPage() {
           )}
 
           {/* Filters */}
-          <div className="flex items-center gap-4 p-4 bg-card rounded-lg border">
+          <div className="flex flex-col sm:flex-row gap-3 p-4 bg-card rounded-lg border">
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -543,28 +548,30 @@ export default function TweetsPage() {
                 />
               </div>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="posted">Posted</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                <SelectItem value="techcrunch">TechCrunch</SelectItem>
-                <SelectItem value="github">GitHub</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="posted">Posted</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="techcrunch">TechCrunch</SelectItem>
+                  <SelectItem value="github">GitHub</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Tweet List */}

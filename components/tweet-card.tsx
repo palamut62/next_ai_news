@@ -66,27 +66,32 @@ export function TweetCard({ tweet, onApprove, onReject, onDelete, isSelected, on
   return (
     <Card className={`hover:bg-muted/50 transition-colors ${isSelected ? 'ring-2 ring-primary' : ''}`}>
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {showSelection && tweet.status === 'pending' && onSelect && (
-              <Checkbox
-                checked={isSelected}
-                onCheckedChange={(checked) => onSelect(tweet.id, checked as boolean)}
-              />
-            )}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {getSourceIcon()}
-            <span className="capitalize">{tweet.source}</span>
-            <span>•</span>
-            <span>{formatDistanceToNow(new Date(tweet.createdAt), { addSuffix: true })}</span>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2">
+              {showSelection && tweet.status === 'pending' && onSelect && (
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={(checked) => onSelect(tweet.id, checked as boolean)}
+                />
+              )}
+              <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
+                {getSourceIcon()}
+                <span className="capitalize">{tweet.source}</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="sm:inline">{formatDistanceToNow(new Date(tweet.createdAt), { addSuffix: true })}</span>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground sm:hidden">
+              {formatDistanceToNow(new Date(tweet.createdAt), { addSuffix: true })}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className={getStatusColor()}>
+            <Badge variant="outline" className={`text-xs ${getStatusColor()}`}>
               {tweet.status}
             </Badge>
-            <Badge variant="outline" className="text-primary border-primary/20">
-              <Star className="h-3 w-3 mr-1" />
+            <Badge variant="outline" className="text-primary border-primary/20 text-xs">
+              <Star className="h-2 w-2 sm:h-3 sm:w-3 mr-1" />
               {tweet.aiScore.toFixed(1)}
             </Badge>
           </div>
@@ -94,33 +99,34 @@ export function TweetCard({ tweet, onApprove, onReject, onDelete, isSelected, on
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Tweet Content */}
-        <div className="p-4 bg-muted/30 rounded-lg border-l-4 border-primary">
+        <div className="p-3 sm:p-4 bg-muted/30 rounded-lg border-l-4 border-primary">
           <p className="text-sm leading-relaxed text-foreground">{tweet.content}</p>
         </div>
 
         {/* Source Information */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>Source:</span>
-          <a
-            href={tweet.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline flex items-center gap-1"
-          >
-            {tweet.sourceTitle}
-            <ExternalLink className="h-3 w-3" />
-          </a>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span className="text-xs sm:text-sm">Source:</span>
+            <a
+              href={tweet.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline flex items-center gap-1 text-xs sm:text-sm"
+            >
+              {tweet.sourceTitle}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
           {tweet.newsDate && (
-            <>
-              <span>•</span>
-              <span>News Date: {new Date(tweet.newsDate).toLocaleDateString()}</span>
-            </>
+            <div className="text-xs sm:text-sm">
+              News: {new Date(tweet.newsDate).toLocaleDateString()}
+            </div>
           )}
         </div>
 
         {/* Engagement Stats (if posted) */}
         {tweet.status === "posted" && tweet.engagement && (
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap gap-2 text-xs sm:text-sm text-muted-foreground">
             <span>Likes: {tweet.engagement.likes}</span>
             <span>Retweets: {tweet.engagement.retweets}</span>
             <span>Replies: {tweet.engagement.replies}</span>
@@ -128,32 +134,33 @@ export function TweetCard({ tweet, onApprove, onReject, onDelete, isSelected, on
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex flex-wrap gap-2 pt-2">
           {/* Manual Twitter Share Button - Always visible */}
           <Button
             size="sm"
             variant="outline"
             onClick={shareOnTwitter}
-            className="border-blue-500/20 text-blue-500 hover:bg-blue-500/10"
+            className="border-blue-500/20 text-blue-500 hover:bg-blue-500/10 text-xs"
             title="Share manually on Twitter"
           >
-            <Share2 className="h-4 w-4 mr-2" />
-            Share on Twitter
+            <Share2 className="h-3 w-3 mr-1" />
+            <span className="hidden sm:inline">Share on Twitter</span>
+            <span className="sm:hidden">Share</span>
           </Button>
 
           {tweet.status === "pending" && (
             <>
-              <Button size="sm" onClick={() => onApprove?.(tweet.id)} className="bg-green-600 hover:bg-green-700" disabled={approveDisabled}>
-                <Check className="h-4 w-4 mr-2" />
+              <Button size="sm" onClick={() => onApprove?.(tweet.id)} className="bg-green-600 hover:bg-green-700 text-xs" disabled={approveDisabled}>
+                <Check className="h-3 w-3 mr-1" />
                 Approve
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => onReject?.(tweet.id)}
-                className="border-red-500/20 text-red-500 hover:bg-red-500/10"
+                className="border-red-500/20 text-red-500 hover:bg-red-500/10 text-xs"
               >
-                <X className="h-4 w-4 mr-2" />
+                <X className="h-3 w-3 mr-1" />
                 Reject
               </Button>
             </>
@@ -164,18 +171,18 @@ export function TweetCard({ tweet, onApprove, onReject, onDelete, isSelected, on
               size="sm"
               variant="outline"
               onClick={() => onDelete?.(tweet.id)}
-              className="border-red-500/20 text-red-500 hover:bg-red-500/10"
+              className="border-red-500/20 text-red-500 hover:bg-red-500/10 text-xs"
             >
-              <X className="h-4 w-4 mr-2" />
+              <X className="h-3 w-3 mr-1" />
               Delete
             </Button>
           )}
         </div>
 
         {tweet.scheduledAt && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            <span>Scheduled for {new Date(tweet.scheduledAt).toLocaleString()}</span>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Calendar className="h-3 w-3" />
+            <span>Scheduled: {new Date(tweet.scheduledAt).toLocaleDateString()} {new Date(tweet.scheduledAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
           </div>
         )}
       </CardContent>

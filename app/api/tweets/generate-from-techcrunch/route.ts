@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import type { TechCrunchArticle } from "@/lib/types"
+import { supabaseStorage } from "@/lib/supabase-storage"
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,6 +14,16 @@ export async function POST(request: NextRequest) {
 
     if (!article || !article.title || !article.description || !article.url) {
       return Response.json({ error: "Article data is required" }, { status: 400 })
+    }
+
+    // Check if article has already been processed (rejected or generated)
+    const isRejected = await supabaseStorage.isArticleRejected(article.title, article.url)
+    if (isRejected) {
+      return Response.json({
+        success: false,
+        error: "Article already processed",
+        message: "This article has already been used to generate tweets or was rejected."
+      }, { status: 400 })
     }
 
     // Use Gemini AI to generate tweet from TechCrunch article
@@ -90,6 +101,22 @@ Generate only the tweet text, nothing else.`
         if (generatedTweet.toLowerCase().includes(article.author.toLowerCase())) score += 0.3
 
         const aiScore = Math.max(1.0, Math.min(10, score))
+
+        // Mark article as processed to prevent duplicate generation
+        try {
+          await supabaseStorage.addRejectedArticle({
+            title: article.title,
+            url: article.url,
+            source: "techcrunch",
+            publishedAt: article.publishedAt,
+            description: article.description,
+            reason: "tweet_generated"
+          })
+          console.log(`✅ Marked TechCrunch article as processed: ${article.title}`)
+        } catch (markError) {
+          console.error('Failed to mark article as processed:', markError)
+          // Don't fail the request if marking fails, just log it
+        }
 
         return Response.json({
           success: true,

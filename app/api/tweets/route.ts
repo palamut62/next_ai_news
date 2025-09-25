@@ -79,6 +79,34 @@ export async function POST(request: NextRequest) {
           for (const id of tweetIds) {
             const tweet = tweets.find(t => t.id === id)
             if (tweet) {
+              // Mark the source (article or repo) as processed to prevent duplicate generation
+              try {
+                if (tweet.source === 'techcrunch') {
+                  await supabaseStorage.addRejectedArticle({
+                    title: tweet.sourceTitle,
+                    url: tweet.sourceUrl,
+                    source: "techcrunch",
+                    publishedAt: tweet.createdAt,
+                    description: tweet.content,
+                    reason: "tweet_approved"
+                  })
+                  console.log(`✅ Marked TechCrunch article as processed: ${tweet.sourceTitle}`)
+                } else if (tweet.source === 'github') {
+                  await supabaseStorage.addRejectedGitHubRepo({
+                    fullName: tweet.sourceTitle,
+                    url: tweet.sourceUrl,
+                    name: tweet.sourceTitle.split('/').pop() || tweet.sourceTitle,
+                    description: tweet.content,
+                    language: "",
+                    stars: 0,
+                    reason: "tweet_approved"
+                  })
+                  console.log(`✅ Marked GitHub repository as processed: ${tweet.sourceTitle}`)
+                }
+              } catch (markError) {
+                console.error(`⚠️ Failed to mark source as processed for tweet ${id}:`, markError)
+              }
+
               // Post to Twitter
               console.log(`🐦 Attempting to post tweet ${id}: "${tweet.content.substring(0, 50)}..."`)
               const twitterResult = await postTweetToTwitter(tweet.content, tweet.sourceUrl)
@@ -114,6 +142,34 @@ export async function POST(request: NextRequest) {
           // Single approve
           const tweet = tweets.find(t => t.id === tweetId)
           if (tweet) {
+            // Mark the source (article or repo) as processed to prevent duplicate generation
+            try {
+              if (tweet.source === 'techcrunch') {
+                await supabaseStorage.addRejectedArticle({
+                  title: tweet.sourceTitle,
+                  url: tweet.sourceUrl,
+                  source: "techcrunch",
+                  publishedAt: tweet.createdAt,
+                  description: tweet.content,
+                  reason: "tweet_approved"
+                })
+                console.log(`✅ Marked TechCrunch article as processed: ${tweet.sourceTitle}`)
+              } else if (tweet.source === 'github') {
+                await supabaseStorage.addRejectedGitHubRepo({
+                  fullName: tweet.sourceTitle,
+                  url: tweet.sourceUrl,
+                  name: tweet.sourceTitle.split('/').pop() || tweet.sourceTitle,
+                  description: tweet.content,
+                  language: "",
+                  stars: 0,
+                  reason: "tweet_approved"
+                })
+                console.log(`✅ Marked GitHub repository as processed: ${tweet.sourceTitle}`)
+              }
+            } catch (markError) {
+              console.error(`⚠️ Failed to mark source as processed for tweet ${tweetId}:`, markError)
+            }
+
             // Post to Twitter
             const twitterResult = await postTweetToTwitter(tweet.content, tweet.sourceUrl)
             if (twitterResult.success) {
@@ -162,13 +218,37 @@ export async function POST(request: NextRequest) {
         }
         break
       case "reject":
-        // Update tweet status to rejected and store for duplicate checking
+        // Update tweet status to rejected and store source for duplicate checking
         if (tweetIds && Array.isArray(tweetIds)) {
           const tweetsToReject = tweets.filter(tweet => tweetIds.includes(tweet.id))
 
-          // Store rejected tweets for duplicate checking
+          // Store rejected tweets and mark sources as processed
           for (const tweet of tweetsToReject) {
             try {
+              // Mark the source (article or repo) as processed to prevent duplicate generation
+              if (tweet.source === 'techcrunch') {
+                await supabaseStorage.addRejectedArticle({
+                  title: tweet.sourceTitle,
+                  url: tweet.sourceUrl,
+                  source: "techcrunch",
+                  publishedAt: tweet.createdAt,
+                  description: tweet.content,
+                  reason: "tweet_rejected"
+                })
+                console.log(`✅ Marked TechCrunch article as processed (rejected): ${tweet.sourceTitle}`)
+              } else if (tweet.source === 'github') {
+                await supabaseStorage.addRejectedGitHubRepo({
+                  fullName: tweet.sourceTitle,
+                  url: tweet.sourceUrl,
+                  name: tweet.sourceTitle.split('/').pop() || tweet.sourceTitle,
+                  description: tweet.content,
+                  language: "",
+                  stars: 0,
+                  reason: "tweet_rejected"
+                })
+                console.log(`✅ Marked GitHub repository as processed (rejected): ${tweet.sourceTitle}`)
+              }
+
               await supabaseStorage.updateTweetStatus(tweet.id, 'rejected')
             } catch (error) {
               console.error(`Failed to store rejected tweet ${tweet.id}:`, error)
@@ -182,6 +262,30 @@ export async function POST(request: NextRequest) {
           const tweetToReject = tweets.find(tweet => tweet.id === tweetId)
           if (tweetToReject) {
             try {
+              // Mark the source (article or repo) as processed to prevent duplicate generation
+              if (tweetToReject.source === 'techcrunch') {
+                await supabaseStorage.addRejectedArticle({
+                  title: tweetToReject.sourceTitle,
+                  url: tweetToReject.sourceUrl,
+                  source: "techcrunch",
+                  publishedAt: tweetToReject.createdAt,
+                  description: tweetToReject.content,
+                  reason: "tweet_rejected"
+                })
+                console.log(`✅ Marked TechCrunch article as processed (rejected): ${tweetToReject.sourceTitle}`)
+              } else if (tweetToReject.source === 'github') {
+                await supabaseStorage.addRejectedGitHubRepo({
+                  fullName: tweetToReject.sourceTitle,
+                  url: tweetToReject.sourceUrl,
+                  name: tweetToReject.sourceTitle.split('/').pop() || tweetToReject.sourceTitle,
+                  description: tweetToReject.content,
+                  language: "",
+                  stars: 0,
+                  reason: "tweet_rejected"
+                })
+                console.log(`✅ Marked GitHub repository as processed (rejected): ${tweetToReject.sourceTitle}`)
+              }
+
               await supabaseStorage.updateTweetStatus(tweetId, 'rejected')
             } catch (error) {
               console.error(`Failed to store rejected tweet ${tweetId}:`, error)
