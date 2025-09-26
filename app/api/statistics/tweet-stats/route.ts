@@ -3,6 +3,8 @@ import { checkAuth } from "@/lib/auth"
 import { getTweetStats, getRecentActivity } from "@/lib/tweet-storage"
 import { getRejectedTweetsStats } from "@/lib/rejected-tweets-storage"
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     if (!checkAuth(request)) {

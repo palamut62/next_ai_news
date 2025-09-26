@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server"
 // import { isDuplicateGitHubRepository } from "@/lib/tweet-storage"
 import { supabaseStorage } from "@/lib/supabase-storage"
 
+export const dynamic = 'force-dynamic'
+
 interface GitHubRepo {
   id: string
   name: string

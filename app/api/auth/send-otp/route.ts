@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server"
 import { sendOTP, isValidAdminEmail } from "@/lib/auth"
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json()
