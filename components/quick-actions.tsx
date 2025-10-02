@@ -37,7 +37,16 @@ export function QuickActions() {
         throw new Error(err?.error || "Haberler alınamadı")
       }
 
-      const fetchData = await fetchRes.json()
+      // Safe JSON parse with error handling
+      let fetchData
+      const responseText = await fetchRes.text()
+      try {
+        fetchData = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error("JSON Parse Error:", parseError)
+        console.error("Response Text:", responseText.slice(0, 500))
+        throw new Error("Invalid JSON response from server")
+      }
       const articles: NewsArticle[] = fetchData?.articles || []
 
       if (!articles.length) {
@@ -61,7 +70,16 @@ export function QuickActions() {
         throw new Error(err?.error || "Tweet oluşturma başarısız")
       }
 
-      const genData = await genRes.json()
+      // Safe JSON parse for generate tweets response
+      let genData
+      const genResponseText = await genRes.text()
+      try {
+        genData = JSON.parse(genResponseText)
+      } catch (parseError) {
+        console.error("Generate Tweets JSON Parse Error:", parseError)
+        console.error("Generate Tweets Response Text:", genResponseText.slice(0, 500))
+        throw new Error("Invalid JSON response from generate tweets API")
+      }
       const generated = genData?.generated || 0
 
       toast({
