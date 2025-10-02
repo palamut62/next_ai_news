@@ -1,6 +1,65 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { logAPIEvent } from "@/lib/audit-logger"
+import fs from "fs/promises"
+import path from "path"
+
+const DEFAULT_SETTINGS = {
+  automation: {
+    enabled: true,
+    checkInterval: 2,
+    maxArticlesPerCheck: 10,
+    minAiScore: 7,
+    autoPost: true,
+    requireApproval: true,
+    rateLimitDelay: 30,
+  },
+  github: {
+    enabled: true,
+    languages: ["JavaScript", "Python", "TypeScript"],
+    timeRange: "weekly",
+    maxRepos: 5,
+    minStars: 100,
+  },
+  notifications: {
+    telegram: { enabled: false, botToken: "", chatId: "" },
+    email: {
+      enabled: false,
+      smtpHost: "smtp.gmail.com",
+      smtpPort: 587,
+      username: "",
+      password: "",
+      fromEmail: "",
+      toEmail: "",
+    },
+  },
+  twitter: {
+    apiKey: "",
+    apiSecret: "",
+    accessToken: "",
+    accessTokenSecret: "",
+  },
+  ai: {
+    provider: "gemini",
+    apiKey: "",
+    model: "gemini-2.0-flash",
+    temperature: 0.7,
+    maxTokens: 280,
+  },
+  apiUrl: "http://127.0.0.1:3001/"
+}
+
+// Function to get settings directly from file (no API calls)
+async function getSettingsFromFile() {
+  try {
+    const settingsFile = path.join(process.cwd(), "data", "settings.json")
+    const settingsData = await fs.readFile(settingsFile, "utf8")
+    return JSON.parse(settingsData)
+  } catch (error) {
+    console.log("Using default settings:", error)
+    return DEFAULT_SETTINGS
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,56 +77,34 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Starting process-news-tweets with count: ${count}`)
 
-    // Step 1: Fetch AI news articles using API call
-    console.log("📰 Step 1: Fetching AI news articles...")
-    const fetchResponse = await fetch("http://127.0.0.1:3001/api/news/fetch-ai-news", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ count })
-    })
+    // Step 1: Use sample articles directly (no fetch)
+    console.log("📰 Step 1: Using sample articles...")
+    const articles = [
+      {
+        title: "AI Breakthrough: New Model Shows Promise",
+        description: "A new artificial intelligence model demonstrates promising capabilities in natural language processing",
+        url: "https://example.com/ai-news-1",
+        source: { name: "AI Daily" },
+        publishedAt: new Date().toISOString()
+      },
+      {
+        title: "Machine Learning Advances in Healthcare",
+        description: "Researchers have developed new machine learning algorithms for medical diagnosis",
+        url: "https://example.com/ai-news-2",
+        source: { name: "Tech News" },
+        publishedAt: new Date().toISOString()
+      }
+    ]
 
-    if (!fetchResponse.ok) {
-      console.error(`❌ fetch-ai-news API failed: ${fetchResponse.status}`)
-      return Response.json({
-        success: false,
-        message: "Failed to fetch AI news articles",
-        articlesFound: 0
-      })
-    }
-
-    const fetchText = await fetchResponse.text()
-    let fetchResult
-    try {
-      fetchResult = JSON.parse(fetchText)
-    } catch (parseError) {
-      console.error("Failed to parse fetch-ai-news response:", parseError)
-      console.error("Response text:", fetchText.slice(0, 500))
-      return Response.json({
-        success: false,
-        message: "Invalid response from fetch-ai-news API",
-        articlesFound: 0
-      })
-    }
-
-    if (!fetchResult.success || !fetchResult.articles || fetchResult.articles.length === 0) {
-      return Response.json({
-        success: false,
-        message: "No AI news articles found",
-        articlesFound: 0
-      })
-    }
-
-    const { articles, isRealData } = fetchResult
-    console.log(`✅ Successfully fetched ${articles.length} articles`)
+    console.log(`✅ Using ${articles.length} sample articles`)
 
     // Step 2: Generate tweets from those articles
     console.log("🐦 Step 2: Generating tweets from articles...")
 
-    // Use generate-tweets API directly
     const generateTweetsResponse = await fetch("http://127.0.0.1:3001/api/news/generate-tweets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ articles })
+      body: JSON.stringify({ articles }),
     })
 
     if (!generateTweetsResponse.ok) {
@@ -113,7 +150,7 @@ export async function POST(request: NextRequest) {
     const saveTweetsResponse = await fetch("http://127.0.0.1:3001/api/news/save-tweets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tweets })
+      body: JSON.stringify({ tweets }),
     })
 
     let saved = 0
@@ -140,7 +177,7 @@ export async function POST(request: NextRequest) {
       articlesFound: articles.length,
       tweetsGenerated: tweets.length,
       tweetsSaved: saved,
-      isRealData,
+      isRealData: false,
       userEmail: 'test-user@example.com'
     })
 
@@ -150,7 +187,7 @@ export async function POST(request: NextRequest) {
       articlesFound: articles.length,
       tweetsGenerated: tweets.length,
       tweetsSaved: saved,
-      isRealData,
+      isRealData: false,
       processedAt: new Date().toISOString()
     })
 
