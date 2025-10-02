@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Fetch AI news articles using API call
     console.log("📰 Step 1: Fetching AI news articles...")
-    const fetchResponse = await fetch("http://77.37.54.38:3001/api/news/fetch-ai-news", {
+    const fetchResponse = await fetch("http://127.0.0.1:3001/api/news/fetch-ai-news", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ count })
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     console.log("🐦 Step 2: Generating tweets from articles...")
 
     // Use generate-tweets API directly
-    const generateTweetsResponse = await fetch("http://77.37.54.38:3001/api/news/generate-tweets", {
+    const generateTweetsResponse = await fetch("http://127.0.0.1:3001/api/news/generate-tweets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ articles })
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     // Step 3: Save tweets to storage (simplified)
     console.log("💾 Step 3: Saving tweets to storage...")
 
-    const saveTweetsResponse = await fetch("http://77.37.54.38:3001/api/news/save-tweets", {
+    const saveTweetsResponse = await fetch("http://127.0.0.1:3001/api/news/save-tweets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tweets })
