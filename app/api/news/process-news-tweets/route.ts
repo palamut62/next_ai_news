@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { logAPIEvent } from "@/lib/audit-logger"
-import { fetchAINewsArticles } from "@/app/api/news/fetch-ai-news/route"
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,9 +18,36 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Starting process-news-tweets with count: ${count}`)
 
-    // Step 1: Fetch AI news articles using direct function call
+    // Step 1: Fetch AI news articles using API call
     console.log("📰 Step 1: Fetching AI news articles...")
-    const fetchResult = await fetchAINewsArticles(count)
+    const fetchResponse = await fetch("http://77.37.54.38:3001/api/news/fetch-ai-news", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ count })
+    })
+
+    if (!fetchResponse.ok) {
+      console.error(`❌ fetch-ai-news API failed: ${fetchResponse.status}`)
+      return Response.json({
+        success: false,
+        message: "Failed to fetch AI news articles",
+        articlesFound: 0
+      })
+    }
+
+    const fetchText = await fetchResponse.text()
+    let fetchResult
+    try {
+      fetchResult = JSON.parse(fetchText)
+    } catch (parseError) {
+      console.error("Failed to parse fetch-ai-news response:", parseError)
+      console.error("Response text:", fetchText.slice(0, 500))
+      return Response.json({
+        success: false,
+        message: "Invalid response from fetch-ai-news API",
+        articlesFound: 0
+      })
+    }
 
     if (!fetchResult.success || !fetchResult.articles || fetchResult.articles.length === 0) {
       return Response.json({
