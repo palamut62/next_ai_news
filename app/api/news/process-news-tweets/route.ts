@@ -4,7 +4,10 @@ import { logAPIEvent } from "@/lib/audit-logger"
 
 async function getApiUrlFromSettings(): Promise<string | null> {
   try {
-    const settingsResponse = await fetch(`${process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : (process.env.NEXT_PUBLIC_BASE_URL || 'https://ai-news-tweet-app.vercel.app')}/api/settings`, {
+    // Use the current request URL to determine the base URL
+    const baseUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : (process.env.NEXT_PUBLIC_BASE_URL || 'http://77.37.54.38:3001')
+
+    const settingsResponse = await fetch(`${baseUrl}/api/settings`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
