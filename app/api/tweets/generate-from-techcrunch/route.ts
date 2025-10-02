@@ -28,6 +28,16 @@ export async function POST(request: NextRequest) {
 
     // Use Gemini AI to generate tweet from TechCrunch article
     try {
+      // Check if Google API key is available
+      if (!process.env.GOOGLE_API_KEY) {
+        console.error(`⚠️ Google API key not found for TechCrunch article: ${article.title}`)
+        return Response.json({
+          success: false,
+          error: "AI service unavailable",
+          message: "The AI generation service is currently unavailable. Please try again later."
+        }, { status: 503 })
+      }
+
       const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
         method: 'POST',
         headers: {
@@ -64,7 +74,20 @@ Generate only the tweet text, nothing else.`
         })
       })
 
-      const geminiData = await geminiResponse.json()
+      // Safe response handling
+      let geminiData
+      try {
+        const responseText = await geminiResponse.text()
+        if (!geminiResponse.ok) {
+          console.error(`❌ Google API error in TechCrunch: ${geminiResponse.status} ${geminiResponse.statusText}`)
+          console.error(`Response text: ${responseText.slice(0, 500)}`)
+          throw new Error('Google API error')
+        }
+        geminiData = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error(`❌ Failed to parse Google API response in TechCrunch:`, parseError)
+        throw new Error('AI service unavailable')
+      }
 
       if (geminiData.candidates && geminiData.candidates[0]?.content?.parts[0]?.text) {
         let generatedTweet = geminiData.candidates[0].content.parts[0].text.trim()

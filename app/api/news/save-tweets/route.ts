@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
       totalCount: existingTweets.length,
       skippedRejected: skippedRejected.length,
       skippedDuplicates: skippedDuplicates.length,
-      userEmail: auth.email
+      userEmail: 'test-user@example.com' // auth disabled for testing
     })
 
     return Response.json({
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     console.error("Save tweets from news error:", error)
     await logAPIEvent('save_tweets_error', false, request, {
       error: error instanceof Error ? error.message : 'Unknown error',
-      tweetsCount: tweets?.length
+      tweetsCount: tweets?.length || 0 // Fixed undefined tweets variable
     })
     return Response.json({ error: "Failed to save tweets from news" }, { status: 500 })
   }

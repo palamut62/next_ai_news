@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Forward to the main tweets API with save action
-    const tweetsResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/tweets`, {
+    const tweetsResponse = await fetch('http://localhost:3001/api/tweets', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
