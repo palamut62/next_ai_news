@@ -39,7 +39,18 @@ export async function POST(request: NextRequest) {
     //   return Response.json({ error: "Authentication required" }, { status: 401 })
     // }
 
-    const { tweets } = await request.json() as { tweets: Tweet[] }
+    // Safe JSON parse
+    const requestText = await request.text()
+    let requestBody
+    try {
+      requestBody = JSON.parse(requestText)
+    } catch (parseError) {
+      console.error("Failed to parse save-tweets request JSON:", parseError)
+      console.error("Request text:", requestText.slice(0, 500))
+      return Response.json({ error: "Invalid JSON in request body" }, { status: 400 })
+    }
+
+    const { tweets } = requestBody as { tweets: Tweet[] }
 
     if (!tweets || tweets.length === 0) {
       return Response.json({ error: "No tweets provided" }, { status: 400 })
