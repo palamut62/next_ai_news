@@ -38,17 +38,22 @@ export async function POST(request: NextRequest) {
     console.log("🐦 Step 2: Generating tweets from articles...")
 
     // Import the generate tweets logic using existing API
+    console.log("🐦 Calling generate-tweets API...")
     const generateTweetsResponse = await fetch("http://77.37.54.38:3001/api/news/generate-tweets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ articles })
     })
 
+    console.log(`📊 generate-tweets response status: ${generateTweetsResponse.status}`)
+
     if (!generateTweetsResponse.ok) {
       throw new Error(`Failed to generate tweets: ${generateTweetsResponse.status}`)
     }
 
     const generateTweetsText = await generateTweetsResponse.text()
+    console.log("📝 generate-tweets response text (first 200 chars):", generateTweetsText.slice(0, 200))
+
     let tweetResult
     try {
       tweetResult = JSON.parse(generateTweetsText)
