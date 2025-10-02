@@ -34,6 +34,8 @@ export default function TweetsPage() {
       const params = new URLSearchParams()
       if (statusFilter !== "all") params.append("status", statusFilter)
       if (sourceFilter !== "all") params.append("source", sourceFilter)
+      // Add cache-busting parameter
+      params.append("t", Date.now().toString())
 
       const response = await fetch(`/api/tweets?${params.toString()}`)
       if (response.ok) {
@@ -174,7 +176,10 @@ export default function TweetsPage() {
           title: "Tweet Approved",
           description: autoPost ? "Tweet approved and posted to Twitter!" : "Tweet approved successfully",
         })
-        fetchTweets()
+        // Add a small delay to ensure database updates are reflected
+        setTimeout(() => {
+          fetchTweets()
+        }, 1000)
   } else {
         toast({
           title: "Approval Failed",
@@ -281,7 +286,10 @@ export default function TweetsPage() {
         })
         setSelectedTweets([])
         setBulkActionsVisible(false)
-        fetchTweets()
+        // Add a small delay to ensure database updates are reflected
+        setTimeout(() => {
+          fetchTweets()
+        }, 1000)
       } else {
         toast({
           title: "Bulk Approval Failed",
