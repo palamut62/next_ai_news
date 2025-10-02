@@ -52,6 +52,12 @@ export async function POST(request: NextRequest) {
     for (const article of articles) {
       try {
         // Use Gemini AI to generate tweet from news article
+        // Check if Google API key is available
+        if (!process.env.GOOGLE_API_KEY) {
+          console.warn(`⚠️ Google API key not found, skipping article: ${article.title}`)
+          continue
+        }
+
         const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
           method: 'POST',
           headers: {
@@ -82,7 +88,20 @@ Generate only the tweet text, nothing else.`
           })
         })
 
-        const geminiData = await geminiResponse.json()
+        // Safe response handling
+        let geminiData
+        try {
+          const responseText = await geminiResponse.text()
+          if (!geminiResponse.ok) {
+            console.error(`❌ Google API error: ${geminiResponse.status} ${geminiResponse.statusText}`)
+            console.error(`Response text: ${responseText.slice(0, 500)}`)
+            continue
+          }
+          geminiData = JSON.parse(responseText)
+        } catch (parseError) {
+          console.error(`❌ Failed to parse Google API response:`, parseError)
+          continue
+        }
 
         let tweetContent = ""
 
