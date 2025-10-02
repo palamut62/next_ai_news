@@ -124,6 +124,17 @@ export async function POST(request: NextRequest) {
                     twitterId: twitterResult.tweetId
                   }
                 }
+
+                // Update status in Supabase database
+                try {
+                  await supabaseStorage.updateTweetStatus(id, "posted", {
+                    posted_at: new Date().toISOString(),
+                    twitter_id: twitterResult.tweetId
+                  })
+                  console.log(`✅ Updated tweet status in database: ${id}`)
+                } catch (dbError) {
+                  console.error(`❌ Failed to update tweet status in database: ${id}`, dbError)
+                }
               } else {
                 console.error(`❌ Failed to post tweet ${id}: ${twitterResult.error}`)
                 // Mark as approved but not posted
@@ -184,23 +195,15 @@ export async function POST(request: NextRequest) {
                 }
               }
 
-              // Save posted tweet to storage
+              // Update status in Supabase database
               try {
-                const postedTweet: Tweet = {
-                  id: twitterResult.tweetId || tweet.id,
-                  content: tweet.content,
-                  source: tweet.source,
-                  sourceUrl: tweet.sourceUrl,
-                  sourceTitle: tweet.sourceTitle,
-                  aiScore: tweet.aiScore,
-                  status: "posted",
-                  createdAt: tweet.createdAt,
-                  postedAt: new Date().toISOString(),
-                  engagement: tweet.engagement || { likes: 0, retweets: 0, replies: 0 }
-                }
-                await supabaseStorage.saveTweet(postedTweet)
-              } catch (saveErr) {
-                console.error('Failed to save posted tweet (single approve):', saveErr)
+                await supabaseStorage.updateTweetStatus(tweetId, "posted", {
+                  posted_at: new Date().toISOString(),
+                  twitter_id: twitterResult.tweetId
+                })
+                console.log(`✅ Updated tweet status in database: ${tweetId}`)
+              } catch (dbError) {
+                console.error(`❌ Failed to update tweet status in database: ${tweetId}`, dbError)
               }
             } else {
               console.error(`Failed to post tweet ${tweetId}: ${twitterResult.error}`)
