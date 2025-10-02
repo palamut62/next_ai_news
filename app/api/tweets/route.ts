@@ -146,6 +146,16 @@ export async function POST(request: NextRequest) {
                     postError: twitterResult.error
                   }
                 }
+
+                // Update status in Supabase database to approved
+                try {
+                  await supabaseStorage.updateTweetStatus(id, "approved", {
+                    post_error: twitterResult.error
+                  })
+                  console.log(`✅ Updated tweet status in database to approved: ${id}`)
+                } catch (dbError) {
+                  console.error(`❌ Failed to update tweet status in database: ${id}`, dbError)
+                }
               }
             }
           }
@@ -215,6 +225,16 @@ export async function POST(request: NextRequest) {
                   status: "approved",
                   postError: twitterResult.error
                 }
+              }
+
+              // Update status in Supabase database to approved
+              try {
+                await supabaseStorage.updateTweetStatus(tweetId, "approved", {
+                  post_error: twitterResult.error
+                })
+                console.log(`✅ Updated tweet status in database to approved: ${tweetId}`)
+              } catch (dbError) {
+                console.error(`❌ Failed to update tweet status in database: ${tweetId}`, dbError)
               }
             }
           }
