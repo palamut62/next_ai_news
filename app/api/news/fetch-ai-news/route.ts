@@ -28,22 +28,9 @@ interface NewsArticle {
   }
 }
 
-export async function POST(request: NextRequest) {
-  let count = 10
+// Export the main logic for internal use
+export async function fetchAINewsArticles(count: number = 10) {
   try {
-    // Temporarily disable authentication for testing
-    // const auth = await checkAuth(request)
-    // if (!auth.authenticated) {
-    //   await logAPIEvent('fetch_news_auth_failure', false, request, {
-    //     url: request.url,
-    //     method: request.method
-    //   })
-    //   return Response.json({ error: "Authentication required" }, { status: 401 })
-    // }
-
-    const { count: requestedCount = 10 } = await request.json()
-    count = requestedCount
-
     // Get today's date for filtering recent AI news
     const today = new Date()
     const oneMonthAgo = new Date(today)
@@ -91,11 +78,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       console.error("❌ NEWS_API_KEY not found in environment variables")
-      return Response.json({
-        success: false,
-        error: "NEWS_API_KEY not configured",
-        message: "Please add NEWS_API_KEY to your environment variables"
-      }, { status: 500 })
+      throw new Error("NEWS_API_KEY not configured")
     }
 
     // If no real articles found from API, try TechCrunch RSS feed for recent AI news
@@ -148,14 +131,7 @@ export async function POST(request: NextRequest) {
       } catch (rssError) {
         console.error("❌ TechCrunch RSS failed:", rssError)
         console.log("⚠️ No real AI news articles found in the last 24 hours")
-        return Response.json({
-          success: true,
-          articles: [],
-          count: 0,
-          fetchedAt: new Date().toISOString(),
-          isRealData: true,
-          message: "No AI news articles found in the last 24 hours (NewsAPI limitation: requires paid plan for recent articles)"
-        })
+        return { success: true, articles: [], count: 0, isRealData: true, duplicatesSkipped: 0 }
       }
     }
 
@@ -241,29 +217,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log successful fetch
-    await logAPIEvent('fetch_news_success', true, request, {
-      totalArticles: articles.length,
-      uniqueArticles: filteredArticles.length,
-      duplicatesSkipped: duplicatesCount,
-      sources: [...new Set(filteredArticles.map(a => a.source.name))],
-      userEmail: 'test-user@example.com'
-    })
-
-    return Response.json({
+    return {
       success: true,
       articles: filteredArticles,
       count: filteredArticles.length,
       duplicatesSkipped: duplicatesCount,
       fetchedAt: new Date().toISOString(),
       isRealData: process.env.NEWS_API_KEY ? true : false
+    }
+  } catch (error) {
+    console.error("Fetch AI news error:", error)
+    throw new Error("Failed to fetch AI news")
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    // Temporarily disable authentication for testing
+    // const auth = await checkAuth(request)
+    // if (!auth.authenticated) {
+    //   await logAPIEvent('fetch_news_auth_failure', false, request, {
+    //     url: request.url,
+    //     method: request.method
+    //   })
+    //   return Response.json({ error: "Authentication required" }, { status: 401 })
+    // }
+
+    const { count: requestedCount = 10 } = await request.json()
+
+    // Use the exported function
+    const result = await fetchAINewsArticles(requestedCount)
+
+    // Log successful fetch
+    await logAPIEvent('fetch_news_success', true, request, {
+      totalArticles: result.articles?.length || 0,
+      uniqueArticles: result.articles?.length || 0,
+      duplicatesSkipped: result.duplicatesSkipped || 0,
+      sources: result.articles ? [...new Set(result.articles.map((a: any) => a.source.name))] : [],
+      userEmail: 'test-user@example.com'
     })
+
+    return Response.json(result)
 
   } catch (error) {
     console.error("Fetch AI news error:", error)
     await logAPIEvent('fetch_news_error', false, request, {
       error: error instanceof Error ? error.message : 'Unknown error',
-      requestedCount: count
+      requestedCount: 10
     })
     return Response.json({ error: "Failed to fetch AI news" }, { status: 500 })
   }

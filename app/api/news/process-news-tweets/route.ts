@@ -1,36 +1,7 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { logAPIEvent } from "@/lib/audit-logger"
-
-async function getApiUrlFromSettings(): Promise<string | null> {
-  try {
-    // Use the current request URL to determine the base URL
-    const baseUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : (process.env.NEXT_PUBLIC_BASE_URL || 'http://77.37.54.38:3001')
-
-    const settingsResponse = await fetch(`${baseUrl}/api/settings`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    })
-
-    if (settingsResponse.ok) {
-      const settingsText = await settingsResponse.text()
-      let settings
-      try {
-        settings = JSON.parse(settingsText)
-      } catch (parseError) {
-        console.error('Failed to parse settings JSON:', parseError)
-        console.error('Settings response text:', settingsText.slice(0, 200))
-        return null
-      }
-      return settings.apiUrl || null
-    }
-  } catch (error) {
-    console.error('Failed to fetch settings for API URL:', error)
-  }
-  return null
-}
+import { fetchAINewsArticles } from "@/app/api/news/fetch-ai-news/route"
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,35 +17,13 @@ export async function POST(request: NextRequest) {
 
     const { count = 10 } = await request.json()
 
-    // Step 1: Fetch AI news articles
-  const baseUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : ((await getApiUrlFromSettings()) || process.env.NEXT_PUBLIC_BASE_URL || 'https://ai-news-tweet-app.vercel.app')
-    const fetchResponse = await fetch(`${baseUrl}/api/news/fetch-ai-news`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': request.headers.get('cookie') || ''
-      },
-      body: JSON.stringify({ count })
-    })
+    console.log(`🚀 Starting process-news-tweets with count: ${count}`)
 
-    if (!fetchResponse.ok) {
-      throw new Error(`Failed to fetch news: ${fetchResponse.status}`)
-    }
+    // Step 1: Fetch AI news articles using direct function call
+    console.log("📰 Step 1: Fetching AI news articles...")
+    const fetchResult = await fetchAINewsArticles(count)
 
-    // Safe JSON parse for fetch response
-    const fetchResponseText = await fetchResponse.text()
-    let fetchResponseData
-    try {
-      fetchResponseData = JSON.parse(fetchResponseText)
-    } catch (parseError) {
-      console.error('Failed to parse fetch response JSON:', parseError)
-      console.error('Fetch response text:', fetchResponseText.slice(0, 500))
-      throw new Error('Invalid JSON response from fetch-ai-news API')
-    }
-
-    const { articles, isRealData } = fetchResponseData
-
-    if (!articles || articles.length === 0) {
+    if (!fetchResult.success || !fetchResult.articles || fetchResult.articles.length === 0) {
       return Response.json({
         success: false,
         message: "No AI news articles found",
@@ -82,23 +31,22 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Step 2: Generate tweets from articles
-    const generateResponse = await fetch(`${baseUrl}/api/news/generate-tweets`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': request.headers.get('cookie') || ''
-      },
-      body: JSON.stringify({ articles })
+    const { articles, isRealData } = fetchResult
+    console.log(`✅ Successfully fetched ${articles.length} articles`)
+
+    // Step 2: Generate tweets from those articles
+    console.log("🐦 Step 2: Generating tweets from articles...")
+
+    // Import the generate tweets logic directly
+    const { generateTweetsFromArticles } = await import("@/lib/tweet-generator")
+
+    const tweetResult = await generateTweetsFromArticles(articles, {
+      maxTweetsPerArticle: 2,
+      tone: "professional",
+      includeHashtags: true
     })
 
-    if (!generateResponse.ok) {
-      throw new Error(`Failed to generate tweets: ${generateResponse.status}`)
-    }
-
-    const { tweets } = await generateResponse.json()
-
-    if (!tweets || tweets.length === 0) {
+    if (!tweetResult.success || !tweetResult.tweets || tweetResult.tweets.length === 0) {
       return Response.json({
         success: false,
         message: "Failed to generate tweets from articles",
@@ -107,115 +55,111 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    const { tweets } = tweetResult
+    console.log(`✅ Successfully generated ${tweets.length} tweets`)
+
     // Step 3: Save tweets to storage
-    const saveResponse = await fetch(`${baseUrl}/api/news/save-tweets`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': request.headers.get('cookie') || ''
-      },
-      body: JSON.stringify({ tweets })
-    })
+    console.log("💾 Step 3: Saving tweets to storage...")
 
-    if (!saveResponse.ok) {
-      throw new Error(`Failed to save tweets: ${saveResponse.status}`)
+    // Import save tweets logic directly
+    const { saveTweetsToStorage } = await import("@/lib/storage")
+
+    const saveResult = await saveTweetsToStorage(tweets)
+
+    if (!saveResult.success) {
+      return Response.json({
+        success: false,
+        message: "Failed to save tweets",
+        articlesFound: articles.length,
+        tweetsGenerated: tweets.length,
+        tweetsSaved: 0
+      })
     }
 
-    // Safe JSON parse for save response
-    const saveResponseText = await saveResponse.text()
-    let saveResponseData
-    try {
-      saveResponseData = JSON.parse(saveResponseText)
-    } catch (parseError) {
-      console.error('Failed to parse save response JSON:', parseError)
-      console.error('Save response text:', saveResponseText.slice(0, 500))
-      throw new Error('Invalid JSON response from save-tweets API')
-    }
+    const { saved, savedTweets } = saveResult
+    console.log(`✅ Successfully saved ${saved} tweets`)
 
-    const { saved, savedTweets } = saveResponseData
-
-    // After saving tweets, optionally trigger auto-post based on settings
+    // Step 4: Optional auto-post based on settings
     let autoPostResult: any = null
-    try {
-      if (saved > 0) {
-        console.log('Fetching settings to determine auto-post behavior')
-        const settingsRes = await fetch(`${baseUrl}/api/settings`, {
-          method: 'GET',
-          headers: { 'Cookie': request.headers.get('cookie') || '' }
-        })
+    if (saved > 0) {
+      console.log("🚀 Step 4: Checking auto-post settings...")
 
-        let settings: any = null
-        if (settingsRes.ok) {
-          const settingsText = await settingsRes.text()
-          try {
-            settings = JSON.parse(settingsText)
-          } catch (parseError) {
-            console.error('Failed to parse settings JSON in auto-post:', parseError)
-            console.error('Auto-post settings response text:', settingsText.slice(0, 200))
-          }
+      try {
+        // Get settings directly without API call
+        const { getSettings } = await import("@/lib/settings")
+        const settings = await getSettings()
+
+        const automation = settings?.automation || {
+          autoPost: true,
+          requireApproval: true,
+          rateLimitDelay: 30
         }
-
-        const automation = settings?.automation || { autoPost: true, requireApproval: true, rateLimitDelay: 30 }
 
         if (automation && automation.autoPost) {
-          console.log('Auto-post is enabled, calling auto-post endpoint')
-          try {
-            const autoPostRes = await fetch(`${baseUrl}/api/tweets/auto-post`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Cookie': request.headers.get('cookie') || ''
-              },
-              body: JSON.stringify({ tweets: savedTweets, settings: automation })
+          console.log("📤 Auto-post is enabled, processing tweets...")
+
+          // Import auto-post logic directly
+          const { postTweetsToTwitter } = await import("@/lib/twitter-api")
+
+          const eligibleTweets = savedTweets.filter((tweet: any) =>
+            automation.requireApproval ? tweet.approved : true
+          )
+
+          if (eligibleTweets.length > 0) {
+            autoPostResult = await postTweetsToTwitter(eligibleTweets, {
+              rateLimitDelay: automation.rateLimitDelay || 30
             })
-
-            try {
-              const autoPostText = await autoPostRes.text()
-              try {
-                autoPostResult = JSON.parse(autoPostText)
-              } catch (parseError) {
-                console.error('Failed to parse auto-post response JSON:', parseError)
-                console.error('Auto-post response text:', autoPostText.slice(0, 500))
-                autoPostResult = { error: 'Failed to parse auto-post response JSON' }
-              }
-            } catch (e) {
-              autoPostResult = { error: 'Failed to read auto-post response' }
-            }
-
-            if (!autoPostRes.ok) {
-              console.error('Auto-post endpoint returned error', autoPostRes.status, autoPostResult)
-            } else {
-              console.log('Auto-post result:', autoPostResult)
-            }
-          } catch (autoErr) {
-            console.error('Failed to call auto-post endpoint:', autoErr)
-            autoPostResult = { error: autoErr instanceof Error ? autoErr.message : String(autoErr) }
+            console.log(`✅ Auto-post completed: ${autoPostResult.posted || 0} tweets posted`)
+          } else {
+            console.log("ℹ️ No eligible tweets for auto-post")
+            autoPostResult = { posted: 0, message: "No eligible tweets for auto-post" }
           }
         } else {
-          console.log('Auto-post is disabled by settings; skipping auto-post')
+          console.log("ℹ️ Auto-post is disabled")
+          autoPostResult = { posted: 0, message: "Auto-post is disabled" }
+        }
+      } catch (autoErr) {
+        console.error("❌ Error in auto-post flow:", autoErr)
+        autoPostResult = {
+          posted: 0,
+          error: autoErr instanceof Error ? autoErr.message : String(autoErr)
         }
       }
-    } catch (err) {
-      console.error('Error while attempting auto-post flow:', err)
     }
 
-    return Response.json({
-      success: true,
+    // Log successful processing
+    await logAPIEvent('process_news_success', true, request, {
       articlesFound: articles.length,
       tweetsGenerated: tweets.length,
       tweetsSaved: saved,
-      savedTweets,
+      tweetsPosted: autoPostResult?.posted || 0,
+      isRealData,
+      userEmail: 'test-user@example.com'
+    })
+
+    return Response.json({
+      success: true,
+      message: "Successfully processed AI news and generated tweets",
+      articlesFound: articles.length,
+      tweetsGenerated: tweets.length,
+      tweetsSaved: saved,
+      tweetsPosted: autoPostResult?.posted || 0,
       autoPostResult,
       isRealData,
-      processedAt: new Date().toISOString(),
-      message: `Successfully processed ${saved} AI news tweets from ${articles.length} articles`
+      processedAt: new Date().toISOString()
     })
 
   } catch (error) {
     console.error("Process news tweets error:", error)
+    await logAPIEvent('process_news_error', false, request, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      requestedCount: 10
+    })
+
     return Response.json({
+      success: false,
       error: "Failed to process news tweets",
-      message: error instanceof Error ? error.message : "Unknown error"
+      message: error instanceof Error ? error.message : 'Unknown error occurred'
     }, { status: 500 })
   }
 }
