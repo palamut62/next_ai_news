@@ -1,8 +1,7 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
+import { supabaseStorage } from "@/lib/supabase-storage"
 import { isTweetRejected } from "@/lib/rejected-tweets-storage"
-import fs from "fs/promises"
-import path from "path"
 import { logAPIEvent } from "@/lib/audit-logger"
 
 interface Tweet {
@@ -56,22 +55,8 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "No tweets provided" }, { status: 400 })
     }
 
-    // Get existing tweets from storage
-    const dataDir = path.join(process.cwd(), "data")
-    const tweetsFile = path.join(dataDir, "tweets.json")
-
-    // Ensure data directory exists
-    await fs.mkdir(dataDir, { recursive: true })
-
-    let existingTweets: Tweet[] = []
-
-    try {
-      const tweetsData = await fs.readFile(tweetsFile, "utf-8")
-      existingTweets = JSON.parse(tweetsData)
-    } catch (error) {
-      // File doesn't exist or is empty, start with empty array
-      existingTweets = []
-    }
+    // Get existing tweets from Supabase
+    const existingTweets = await supabaseStorage.getAllTweets()
 
     // Filter out tweets that have been rejected
     const filteredTweets = []
@@ -101,17 +86,20 @@ export async function POST(request: NextRequest) {
       filteredTweets.push(tweet)
     }
 
-    // Add new tweets
-    const newTweets = filteredTweets.map(tweet => ({
-      ...tweet,
-      id: `news_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
-      createdAt: new Date().toISOString()
-    }))
+    // Add new tweets with proper ID and save to Supabase
+    const newTweets = []
+    for (const tweet of filteredTweets) {
+      const newTweet = {
+        ...tweet,
+        id: `news_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
+        createdAt: new Date().toISOString()
+      }
 
-    existingTweets.push(...newTweets)
-
-    // Save back to file
-    await fs.writeFile(tweetsFile, JSON.stringify(existingTweets, null, 2))
+      const saved = await supabaseStorage.saveTweet(newTweet)
+      if (saved) {
+        newTweets.push(newTweet)
+      }
+    }
 
     // Log successful save operation
     await logAPIEvent('save_tweets_success', true, request, {
@@ -122,10 +110,12 @@ export async function POST(request: NextRequest) {
       userEmail: 'test-user@example.com' // auth disabled for testing
     })
 
+    const totalTweets = await supabaseStorage.getAllTweets()
+
     return Response.json({
       success: true,
       saved: newTweets.length,
-      total: existingTweets.length,
+      total: totalTweets.length,
       savedTweets: newTweets,
       skippedRejected: skippedRejected.length,
       skippedDuplicates: skippedDuplicates.length,

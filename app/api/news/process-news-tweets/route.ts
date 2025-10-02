@@ -101,7 +101,11 @@ export async function POST(request: NextRequest) {
     // Step 2: Generate tweets from those articles
     console.log("🐦 Step 2: Generating tweets from articles...")
 
-    const generateTweetsResponse = await fetch("http://localhost:3001/api/news/generate-tweets", {
+    const serverUrl = process.env.NODE_ENV === 'production'
+      ? `http://77.37.54.38:3001`
+      : `http://localhost:3001`
+
+    const generateTweetsResponse = await fetch(`${serverUrl}/api/news/generate-tweets`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ articles }),
@@ -147,7 +151,7 @@ export async function POST(request: NextRequest) {
     // Step 3: Save tweets to storage (simplified)
     console.log("💾 Step 3: Saving tweets to storage...")
 
-    const saveTweetsResponse = await fetch("http://localhost:3001/api/news/save-tweets", {
+    const saveTweetsResponse = await fetch(`${serverUrl}/api/news/save-tweets`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tweets }),
