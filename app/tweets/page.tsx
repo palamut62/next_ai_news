@@ -37,8 +37,14 @@ export default function TweetsPage() {
 
       const response = await fetch(`/api/tweets?${params.toString()}`)
       if (response.ok) {
-        const data = await response.json()
-        setTweets(data)
+        const responseText = await response.text()
+        try {
+          const data = JSON.parse(responseText)
+          setTweets(data)
+        } catch (parseError) {
+          console.error("Failed to parse tweets JSON:", parseError)
+          console.error("Tweets response text:", responseText.slice(0, 500))
+        }
       }
     } catch (error) {
       console.error("Failed to fetch tweets:", error)

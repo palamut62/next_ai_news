@@ -12,7 +12,15 @@ async function getApiUrlFromSettings(): Promise<string | null> {
     })
 
     if (settingsResponse.ok) {
-      const settings = await settingsResponse.json()
+      const settingsText = await settingsResponse.text()
+      let settings
+      try {
+        settings = JSON.parse(settingsText)
+      } catch (parseError) {
+        console.error('Failed to parse settings JSON:', parseError)
+        console.error('Settings response text:', settingsText.slice(0, 200))
+        return null
+      }
       return settings.apiUrl || null
     }
   } catch (error) {
@@ -50,7 +58,18 @@ export async function POST(request: NextRequest) {
       throw new Error(`Failed to fetch news: ${fetchResponse.status}`)
     }
 
-    const { articles, isRealData } = await fetchResponse.json()
+    // Safe JSON parse for fetch response
+    const fetchResponseText = await fetchResponse.text()
+    let fetchResponseData
+    try {
+      fetchResponseData = JSON.parse(fetchResponseText)
+    } catch (parseError) {
+      console.error('Failed to parse fetch response JSON:', parseError)
+      console.error('Fetch response text:', fetchResponseText.slice(0, 500))
+      throw new Error('Invalid JSON response from fetch-ai-news API')
+    }
+
+    const { articles, isRealData } = fetchResponseData
 
     if (!articles || articles.length === 0) {
       return Response.json({
@@ -99,7 +118,18 @@ export async function POST(request: NextRequest) {
       throw new Error(`Failed to save tweets: ${saveResponse.status}`)
     }
 
-    const { saved, savedTweets } = await saveResponse.json()
+    // Safe JSON parse for save response
+    const saveResponseText = await saveResponse.text()
+    let saveResponseData
+    try {
+      saveResponseData = JSON.parse(saveResponseText)
+    } catch (parseError) {
+      console.error('Failed to parse save response JSON:', parseError)
+      console.error('Save response text:', saveResponseText.slice(0, 500))
+      throw new Error('Invalid JSON response from save-tweets API')
+    }
+
+    const { saved, savedTweets } = saveResponseData
 
     // After saving tweets, optionally trigger auto-post based on settings
     let autoPostResult: any = null
@@ -113,7 +143,13 @@ export async function POST(request: NextRequest) {
 
         let settings: any = null
         if (settingsRes.ok) {
-          settings = await settingsRes.json()
+          const settingsText = await settingsRes.text()
+          try {
+            settings = JSON.parse(settingsText)
+          } catch (parseError) {
+            console.error('Failed to parse settings JSON in auto-post:', parseError)
+            console.error('Auto-post settings response text:', settingsText.slice(0, 200))
+          }
         }
 
         const automation = settings?.automation || { autoPost: true, requireApproval: true, rateLimitDelay: 30 }
@@ -131,9 +167,16 @@ export async function POST(request: NextRequest) {
             })
 
             try {
-              autoPostResult = await autoPostRes.json()
+              const autoPostText = await autoPostRes.text()
+              try {
+                autoPostResult = JSON.parse(autoPostText)
+              } catch (parseError) {
+                console.error('Failed to parse auto-post response JSON:', parseError)
+                console.error('Auto-post response text:', autoPostText.slice(0, 500))
+                autoPostResult = { error: 'Failed to parse auto-post response JSON' }
+              }
             } catch (e) {
-              autoPostResult = { error: 'Failed to parse auto-post response' }
+              autoPostResult = { error: 'Failed to read auto-post response' }
             }
 
             if (!autoPostRes.ok) {
