@@ -77,6 +77,11 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Starting process-news-tweets with count: ${count}`)
 
+    // Get server URL for internal API calls
+    const serverUrl = process.env.NODE_ENV === 'production'
+      ? 'http://77.37.54.38:3001'
+      : 'http://localhost:3001'
+
     // Step 1: Fetch real AI news articles
     console.log("📰 Step 1: Fetching real AI news articles...")
 
@@ -126,10 +131,6 @@ export async function POST(request: NextRequest) {
 
     // Step 2: Generate tweets from those articles
     console.log("🐦 Step 2: Generating tweets from articles...")
-
-    const serverUrl = process.env.NODE_ENV === 'production'
-      ? `http://77.37.54.38:3001`
-      : `http://localhost:3001`
 
     const generateTweetsResponse = await fetch(`${serverUrl}/api/news/generate-tweets`, {
       method: "POST",
