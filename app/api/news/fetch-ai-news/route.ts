@@ -3,18 +3,42 @@ import { checkAuth } from "@/lib/auth"
 import { checkAndFilterNewsArticles, markNewsArticlesProcessed, newsDuplicateDetector } from "@/lib/news-duplicate-detector"
 import { logAPIEvent } from "@/lib/audit-logger"
 
-// Simple fetch with timeout helper
-async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeout = 20000) {
-  const controller = new AbortController()
-  const id = setTimeout(() => controller.abort(), timeout)
-  try {
-    const res = await fetch(url, { ...opts, signal: controller.signal })
-    clearTimeout(id)
-    return res
-  } catch (err) {
-    clearTimeout(id)
-    throw err
+// Enhanced fetch with timeout and retry mechanism
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeout = 30000, maxRetries = 2): Promise<Response> {
+  let lastError: Error
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController()
+    const id = setTimeout(() => controller.abort(), timeout)
+
+    try {
+      console.log(`📡 Fetch attempt ${attempt + 1}/${maxRetries + 1} for: ${url}`)
+      const res = await fetch(url, { ...opts, signal: controller.signal })
+      clearTimeout(id)
+
+      if (res.ok) {
+        return res
+      } else {
+        console.warn(`⚠️ HTTP ${res.status} on attempt ${attempt + 1}`)
+        if (attempt === maxRetries) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+        }
+      }
+    } catch (err) {
+      clearTimeout(id)
+      lastError = err instanceof Error ? err : new Error(String(err))
+      console.warn(`❌ Attempt ${attempt + 1} failed:`, lastError.message)
+
+      if (attempt < maxRetries) {
+        // Exponential backoff: 2s, 4s
+        const delay = Math.min(2000 * Math.pow(2, attempt), 8000)
+        console.log(`⏳ Waiting ${delay}ms before retry...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
   }
+
+  throw lastError || new Error('Max retries exceeded')
 }
 
 interface NewsArticle {
@@ -58,7 +82,7 @@ export async function fetchAINewsArticles(count: number = 10) {
 
         console.log(`📰 Fetching real AI news from: ${newsApiUrl}`)
         try {
-          const response = await fetchWithTimeout(newsApiUrl, {}, 20000)
+          const response = await fetchWithTimeout(newsApiUrl, {}, 30000, 2)
           const text = await response.text()
           let data: any = {}
           try { data = JSON.parse(text) } catch { /* ignore non-json */ }
@@ -86,7 +110,7 @@ export async function fetchAINewsArticles(count: number = 10) {
       try {
         console.log("🔄 Trying TechCrunch RSS feed for recent AI news...")
         const rssUrl = 'https://techcrunch.com/category/artificial-intelligence/feed/'
-        const techcrunchRSS = await fetchWithTimeout(rssUrl, {}, 25000)
+        const techcrunchRSS = await fetchWithTimeout(rssUrl, {}, 30000, 1)
         const rssText = await techcrunchRSS.text()
 
         // Simple and robust RSS parsing without relying on DOMParser (works in Node)

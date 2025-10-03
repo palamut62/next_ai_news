@@ -37,8 +37,16 @@ class NewsDuplicateDetector {
     const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
     try {
       await fs.access(tmpDir)
+      console.log(`✅ Data directory accessible: ${tmpDir}`)
     } catch {
-      await fs.mkdir(tmpDir, { recursive: true })
+      try {
+        await fs.mkdir(tmpDir, { recursive: true })
+        console.log(`✅ Created data directory: ${tmpDir}`)
+      } catch (mkdirError) {
+        console.error(`❌ Failed to create data directory: ${tmpDir}`, mkdirError)
+        // Fallback to memory-only mode
+        throw new Error(`Cannot access or create data directory: ${tmpDir}`)
+      }
     }
   }
 
@@ -46,22 +54,28 @@ class NewsDuplicateDetector {
     try {
       // Use cache if still valid
       if (Date.now() - this.lastCacheUpdate < this.CACHE_TTL && this.articlesCache.size > 0) {
+        console.log(`📦 Using cached articles (${this.articlesCache.size} items)`)
         return this.articlesCache
       }
 
       await this.ensureDataDirectory()
+      console.log(`📂 Loading articles from: ${this.ARTICLES_FILE}`)
       const data = await fs.readFile(this.ARTICLES_FILE, 'utf-8')
       const articles: ProcessedArticle[] = JSON.parse(data)
 
       this.articlesCache = new Map(articles.map(article => [article.hash, article]))
       this.lastCacheUpdate = Date.now()
 
+      console.log(`✅ Loaded ${articles.length} processed articles from disk`)
       return this.articlesCache
     } catch (error) {
       if ((error as any).code === 'ENOENT') {
+        console.log(`📄 No existing articles file found, starting fresh`)
         return new Map()
       }
-      throw error
+      console.error('❌ Failed to load articles:', error)
+      // Return empty map instead of throwing to avoid breaking the main functionality
+      return new Map()
     }
   }
 
@@ -74,9 +88,11 @@ class NewsDuplicateDetector {
       // Update cache
       this.articlesCache = articles
       this.lastCacheUpdate = Date.now()
+      console.log(`💾 Saved ${articles.size} processed articles to disk`)
     } catch (error) {
-      console.error('Failed to save processed articles:', error)
-      throw error
+      console.error('❌ Failed to save processed articles:', error)
+      // Don't throw error to avoid breaking the main functionality
+      console.log('⚠️ Continuing with memory-only mode for duplicate detection')
     }
   }
 
