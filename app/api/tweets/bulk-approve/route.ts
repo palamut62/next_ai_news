@@ -86,8 +86,8 @@ export async function POST(request: NextRequest) {
             // Update tweet status in Supabase
             try {
               await supabaseStorage.updateTweetStatus(tweetId, 'posted', {
-                twitterId: twitterResult.tweet_id,
-                postedAt: new Date().toISOString()
+                twitter_id: twitterResult.tweet_id,
+                posted_at: new Date().toISOString()
               })
             } catch (updateError) {
               console.error(`⚠️ Failed to update tweet status in Supabase for ${tweetId}:`, updateError)
