@@ -71,8 +71,8 @@ export async function fetchAINewsArticles(count: number = 10) {
     // Try NewsAPI first - use the real API key from .env
     if (process.env.NEWS_API_KEY) {
       try {
-        // Enhanced AI-related search terms for better news coverage
-        const searchQuery = "artificial intelligence OR AI OR machine learning OR ChatGPT OR OpenAI OR Google AI OR Microsoft AI OR Meta AI OR Anthropic OR GPT OR LLM OR generative AI OR automation OR robotics"
+        // More specific AI-related search terms to get actual AI news
+        const searchQuery = "\"artificial intelligence\" OR \"machine learning\" OR ChatGPT OR OpenAI OR \"Google AI\" OR \"Meta AI\" OR Anthropic OR GPT OR \"generative AI\" OR \"large language model\" OR LLM"
 
         // Test with a shorter date range first to avoid API limitations
         const testFromDate = new Date(today)
