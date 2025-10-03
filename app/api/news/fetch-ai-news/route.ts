@@ -90,7 +90,6 @@ export async function fetchAINewsArticles(count: number = 10) {
           if (response.ok && data.articles && data.articles.length > 0) {
             articles = data.articles.slice(0, count)
             console.log(`✅ Successfully fetched ${articles.length} real AI news articles`)
-            console.log(`📰 Sample articles:`, articles.slice(0, 2).map(a => ({ title: a.title, source: a.source.name })))
           } else {
             console.error(`❌ NewsAPI response status: ${response.status} ${response.statusText}`)
             console.error('❌ NewsAPI body (first 1000 chars):', text.slice(0, 1000))
@@ -200,10 +199,7 @@ export async function fetchAINewsArticles(count: number = 10) {
         title.includes(keyword) || description.includes(keyword)
       )
 
-      if (!hasAIKeyword) {
-        console.log(`❌ Filtered out non-AI article: "${title.substring(0, 50)}..."`)
-        continue
-      }
+      if (!hasAIKeyword) continue
 
       // Check for duplicates using the new advanced system
       const duplicateCheck = await newsDuplicateDetector.isDuplicate({
