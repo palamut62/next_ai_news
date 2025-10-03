@@ -5,7 +5,7 @@ import { logAPIEvent } from "@/lib/audit-logger"
 
 // Enhanced fetch with timeout and retry mechanism
 async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeout = 30000, maxRetries = 2): Promise<Response> {
-  let lastError: Error
+  let lastError: Error = new Error('Max retries exceeded')
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController()

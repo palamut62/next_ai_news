@@ -77,26 +77,52 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Starting process-news-tweets with count: ${count}`)
 
-    // Step 1: Use sample articles directly (no fetch)
-    console.log("📰 Step 1: Using sample articles...")
-    const articles = [
-      {
-        title: "AI Breakthrough: New Model Shows Promise",
-        description: "A new artificial intelligence model demonstrates promising capabilities in natural language processing",
-        url: "https://example.com/ai-news-1",
-        source: { name: "AI Daily" },
-        publishedAt: new Date().toISOString()
-      },
-      {
-        title: "Machine Learning Advances in Healthcare",
-        description: "Researchers have developed new machine learning algorithms for medical diagnosis",
-        url: "https://example.com/ai-news-2",
-        source: { name: "Tech News" },
-        publishedAt: new Date().toISOString()
-      }
-    ]
+    // Step 1: Fetch real AI news articles
+    console.log("📰 Step 1: Fetching real AI news articles...")
 
-    console.log(`✅ Using ${articles.length} sample articles`)
+    const fetchAINewsResponse = await fetch(`${serverUrl}/api/news/fetch-ai-news`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ count }),
+    })
+
+    if (!fetchAINewsResponse.ok) {
+      console.error(`❌ fetch-ai-news API failed: ${fetchAINewsResponse.status}`)
+      return Response.json({
+        success: false,
+        message: "Failed to fetch real AI news articles",
+        articlesFound: 0,
+        tweetsGenerated: 0
+      })
+    }
+
+    const fetchNewsText = await fetchAINewsResponse.text()
+    let fetchResult
+    try {
+      fetchResult = JSON.parse(fetchNewsText)
+    } catch (parseError) {
+      console.error("Failed to parse fetch-ai-news response:", parseError)
+      console.error("Response text:", fetchNewsText.slice(0, 500))
+      return Response.json({
+        success: false,
+        message: "Invalid response from fetch-ai-news API",
+        articlesFound: 0,
+        tweetsGenerated: 0
+      })
+    }
+
+    if (!fetchResult.success || !fetchResult.articles || fetchResult.articles.length === 0) {
+      console.log(`No articles found: ${fetchResult.message || 'Unknown reason'}`)
+      return Response.json({
+        success: false,
+        message: "No AI news articles found",
+        articlesFound: 0,
+        tweetsGenerated: 0
+      })
+    }
+
+    const articles = fetchResult.articles
+    console.log(`✅ Successfully fetched ${articles.length} real AI news articles`)
 
     // Step 2: Generate tweets from those articles
     console.log("🐦 Step 2: Generating tweets from articles...")
