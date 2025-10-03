@@ -116,11 +116,9 @@ export async function POST(request: NextRequest) {
 
             console.error(`❌ Tweet ${tweetId} approved but failed to post: ${twitterResult.error}`, twitterResult.details || '')
 
-            // Update tweet status in Supabase with post error
+            // Update tweet status in Supabase
             try {
-              await supabaseStorage.updateTweetStatus(tweetId, 'approved', {
-                postError: twitterResult.error || null
-              })
+              await supabaseStorage.updateTweetStatus(tweetId, 'approved')
             } catch (updateError) {
               console.error(`⚠️ Failed to update tweet status in Supabase for ${tweetId}:`, updateError)
             }

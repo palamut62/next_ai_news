@@ -150,9 +150,7 @@ export async function POST(request: NextRequest) {
 
                 // Update status in Supabase database to approved
                 try {
-                  await supabaseStorage.updateTweetStatus(id, "approved", {
-                    post_error: twitterResult.error
-                  })
+                  await supabaseStorage.updateTweetStatus(id, "approved")
                   console.log(`✅ Updated tweet status in database to approved: ${id}`)
                 } catch (dbError) {
                   console.error(`❌ Failed to update tweet status in database: ${id}`, dbError)
