@@ -72,7 +72,7 @@ export async function fetchAINewsArticles(count: number = 10) {
     if (process.env.NEWS_API_KEY) {
       try {
         // Enhanced AI-related search terms for better news coverage
-        const searchQuery = "artificial intelligence OR AI OR machine learning OR deep learning OR neural networks OR ChatGPT OR OpenAI OR Google AI OR Microsoft AI OR Meta AI OR Anthropic OR GPT OR LLM OR large language model OR generative AI OR automation OR robotics OR computer vision OR natural language processing"
+        const searchQuery = "artificial intelligence OR AI OR machine learning OR ChatGPT OR OpenAI OR Google AI OR Microsoft AI OR Meta AI OR Anthropic OR GPT OR LLM OR generative AI OR automation OR robotics"
 
         // Test with a shorter date range first to avoid API limitations
         const testFromDate = new Date(today)
@@ -186,9 +186,9 @@ export async function fetchAINewsArticles(count: number = 10) {
 
       if (hasExcludedKeyword) continue
 
-      // Prioritize AI-related content
+      // Prioritize AI-related content (more flexible matching)
       const aiKeywords = [
-        'artificial intelligence', 'ai', 'machine learning', 'deep learning',
+        'artificial intelligence', 'artificial intelligence', 'machine learning', 'deep learning',
         'neural network', 'chatgpt', 'openai', 'gpt', 'llm', 'large language model',
         'generative ai', 'automation', 'robotics', 'computer vision', 'nlp',
         'natural language processing', 'anthropic', 'claude', 'gemini', 'bard',
@@ -209,9 +209,9 @@ export async function fetchAINewsArticles(count: number = 10) {
         publishedAt: article.publishedAt,
         description: article.description
       }, {
-        titleSimilarity: 0.8,  // 80% title similarity threshold
-        contentSimilarity: 0.6, // 60% content similarity threshold
-        timeWindow: 48 // 48 hours time window
+        titleSimilarity: 0.9,  // 90% title similarity threshold (less aggressive)
+        contentSimilarity: 0.8, // 80% content similarity threshold (less aggressive)
+        timeWindow: 24 // 24 hours time window (less aggressive)
       })
 
       if (duplicateCheck.isDuplicate) {
