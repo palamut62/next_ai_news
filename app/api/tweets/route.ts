@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         tweets = tweets.filter(tweet => tweet.status === status)
       }
     } else {
+      // By default, only show non-posted tweets (pending, approved, rejected)
       tweets = tweets.filter(tweet => tweet.status !== 'posted')
     }
 

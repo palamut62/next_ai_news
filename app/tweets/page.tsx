@@ -37,11 +37,18 @@ export default function TweetsPage() {
       // Add cache-busting parameter
       params.append("t", Date.now().toString())
 
-      const response = await fetch(`/api/tweets?${params.toString()}`)
+      const response = await fetch(`/api/tweets?${params.toString()}`, {
+        cache: 'no-cache',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
       if (response.ok) {
         const responseText = await response.text()
         try {
           const data = JSON.parse(responseText)
+          console.log(`📊 Fetched ${data.length} tweets with status filter: ${statusFilter}`)
           setTweets(data)
         } catch (parseError) {
           console.error("Failed to parse tweets JSON:", parseError)
@@ -142,6 +149,20 @@ export default function TweetsPage() {
       tweet.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
       tweet.sourceTitle.toLowerCase().includes(searchQuery.toLowerCase())
 
+    // Additional safety check: ensure posted tweets are filtered out in default view
+    if (statusFilter === "pending" && tweet.status === "posted") {
+      console.log(`⚠️ Filtered out posted tweet from pending view: ${tweet.id}`)
+      return false
+    }
+    if (statusFilter === "pending" && tweet.status === "approved") {
+      console.log(`⚠️ Filtered out approved tweet from pending view: ${tweet.id}`)
+      return false
+    }
+    if (statusFilter === "pending" && tweet.status === "rejected") {
+      console.log(`⚠️ Filtered out rejected tweet from pending view: ${tweet.id}`)
+      return false
+    }
+
     return matchesSearch
   })
 
@@ -178,8 +199,9 @@ export default function TweetsPage() {
         })
         // Add a small delay to ensure database updates are reflected
         setTimeout(() => {
+          console.log("🔄 Refreshing tweets after approval...")
           fetchTweets()
-        }, 1000)
+        }, 2000)
   } else {
         toast({
           title: "Approval Failed",
@@ -288,8 +310,9 @@ export default function TweetsPage() {
         setBulkActionsVisible(false)
         // Add a small delay to ensure database updates are reflected
         setTimeout(() => {
+          console.log("🔄 Refreshing tweets after bulk approval...")
           fetchTweets()
-        }, 1000)
+        }, 2000)
       } else {
         toast({
           title: "Bulk Approval Failed",
@@ -461,7 +484,10 @@ export default function TweetsPage() {
                   <span className="hidden sm:inline">Bulk Actions</span>
                   <span className="sm:inline">Bulk</span>
                 </Button>
-                <Button onClick={fetchTweets} disabled={loading} size="sm">
+                <Button onClick={() => {
+                  console.log("🔄 Manual refresh triggered")
+                  fetchTweets()
+                }} disabled={loading} size="sm">
                   <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
                   {loading ? 'Loading...' : 'Refresh'}
                 </Button>
