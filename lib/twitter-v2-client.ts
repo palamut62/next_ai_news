@@ -1,30 +1,73 @@
 import OAuth from "oauth-1.0a";
 import crypto from "crypto";
-import { generateHashtags } from './hashtag'
+import { getTwitterCharacterCount, estimateTotalTweetLength } from './utils'
 
-export async function postTextTweetV2(tweetText: string, sourceUrl?: string) {
+export async function postTextTweetV2(
+  tweetText: string,
+  sourceUrl?: string,
+  hashtags?: string[]
+) {
   if (!tweetText || !tweetText.trim()) {
     return { success: false, error: "Tweet metni boş olamaz" };
   }
-  let text = tweetText;
-  // Generate up to 4 hashtags related to the content
-  const hashtags = generateHashtags(text, 4)
-  const hashtagsSuffix = hashtags.length ? '\n' + hashtags.join(' ') : ''
 
-  // Prepare source URL suffix (bare URL). Only append if the content doesn't already include it.
+  let text = tweetText.trim()
+  const MAX_LENGTH = 280
+
+  // Use provided hashtags or generate them if needed
+  let finalHashtags = hashtags || []
+
+  // Prepare source URL suffix
   const rawUrl = sourceUrl && sourceUrl.trim() ? sourceUrl.trim() : ''
-  let sourceSuffix = ''
-  if (rawUrl && !text.includes(rawUrl)) {
-    sourceSuffix = '\n' + rawUrl
+
+  // Check if URL is already in the text
+  const urlAlreadyIncluded = rawUrl && text.includes(rawUrl)
+
+  // Estimate total length with URL and hashtags
+  let totalLength = estimateTotalTweetLength(text, !urlAlreadyIncluded ? rawUrl : undefined, finalHashtags)
+
+  // If over limit, progressively reduce hashtags
+  if (totalLength > MAX_LENGTH && finalHashtags.length > 0) {
+    finalHashtags = finalHashtags.slice(0, 2)
+    totalLength = estimateTotalTweetLength(text, !urlAlreadyIncluded ? rawUrl : undefined, finalHashtags)
   }
 
-  const maxLen = 280
+  if (totalLength > MAX_LENGTH && finalHashtags.length > 0) {
+    finalHashtags = finalHashtags.slice(0, 1)
+    totalLength = estimateTotalTweetLength(text, !urlAlreadyIncluded ? rawUrl : undefined, finalHashtags)
+  }
 
-  // Reserve space for sourceSuffix and hashtagsSuffix and ellipsis
-  const reserved = sourceSuffix.length + hashtagsSuffix.length
-  if (text.length + reserved > maxLen) {
-    const allowed = maxLen - reserved - 3 // for ...
-    text = text.slice(0, Math.max(0, allowed)) + "..."
+  // If still over limit, truncate the tweet content itself
+  if (totalLength > MAX_LENGTH) {
+    const reserved = (rawUrl && !urlAlreadyIncluded ? getTwitterCharacterCount(rawUrl) + 2 : 0) +
+                     (finalHashtags.length > 0 ? 1 + finalHashtags.reduce((sum, tag) => sum + getTwitterCharacterCount(tag) + 1, 0) : 0)
+    const maxContent = MAX_LENGTH - reserved - 3 // -3 for ...
+
+    if (maxContent > 0) {
+      // Truncate using proper character counting
+      let truncated = ""
+      let count = 0
+      try {
+        // @ts-ignore
+        if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+          // @ts-ignore
+          const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+          // @ts-ignore
+          for (const segment of segmenter.segment(text)) {
+            count += 1
+            if (count > maxContent) break
+            truncated += segment.segment
+          }
+        } else {
+          truncated = text.substring(0, maxContent)
+        }
+      } catch (e) {
+        truncated = text.substring(0, maxContent)
+      }
+      text = truncated + "..."
+    } else {
+      text = "..."
+    }
   }
   const BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN;
   const API_KEY = process.env.TWITTER_API_KEY;
@@ -60,7 +103,24 @@ export async function postTextTweetV2(tweetText: string, sourceUrl?: string) {
     "Content-Type": "application/json",
   };
 
-  const bodyText = text + sourceSuffix + hashtagsSuffix
+  // Build the final tweet
+  let bodyText = text
+
+  // Add URL if not already included in text
+  if (rawUrl && !urlAlreadyIncluded) {
+    bodyText += '\n\n' + rawUrl
+  }
+
+  // Add hashtags if available
+  if (finalHashtags.length > 0) {
+    bodyText += '\n' + finalHashtags.join(' ')
+  }
+
+  // Final length check and log
+  const finalLength = getTwitterCharacterCount(bodyText)
+  if (finalLength > MAX_LENGTH) {
+    console.warn(`⚠️ Tweet exceeds 280 characters: ${finalLength} chars. Content: "${bodyText.substring(0, 50)}..."`)
+  }
 
   const response = await fetch(request_data.url, {
     method: "POST",
@@ -88,11 +148,20 @@ export async function postTextTweetV2(tweetText: string, sourceUrl?: string) {
 
   if (data.data && data.data.id) {
     const tweet_id = data.data.id;
-    const tweet_url = `https://x.com/i/status/${tweet_id}`;
-    return { success: true, tweet_id, url: tweet_url, hashtags };
+    const tweet_url = `https://x.com/i/web/status/${tweet_id}`;
+    console.log(`✅ Tweet posted successfully: ${tweet_url}`)
+    return {
+      success: true,
+      tweet_id,
+      url: tweet_url,
+      hashtags: finalHashtags,
+      finalLength: finalLength
+    };
   } else if (data.errors) {
+    console.error(`❌ Twitter API error: ${data.errors.map((e: any) => e.message).join(", ")}`)
     return { success: false, error: data.errors.map((e: any) => e.message).join(", "), details: data };
   } else {
+    console.error(`❌ Unknown Twitter API response: ${JSON.stringify(data)}`)
     return { success: false, error: "Unknown Twitter API response: " + JSON.stringify(data), details: data };
   }
 }

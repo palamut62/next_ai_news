@@ -78,7 +78,11 @@ export async function POST(request: NextRequest) {
         // If autoPost is true, post to Twitter immediately
         if (autoPost) {
           console.log(`Auto-posting tweet ${tweetId} to Twitter...`)
-          const twitterResult = await postTextTweetV2(tweetData.content, tweetData.sourceUrl)
+          const twitterResult = await postTextTweetV2(
+            tweetData.content,
+            tweetData.sourceUrl,
+            tweetData.hashtags || []
+          )
 
           if (twitterResult.success) {
             postedCount++

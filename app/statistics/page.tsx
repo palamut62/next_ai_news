@@ -26,24 +26,28 @@ import {
 import { MessageSquare, TrendingUp, CheckCircle, Heart, Repeat, MessageCircle, Target, RefreshCw, XCircle } from "lucide-react"
 import { useState, useEffect } from "react"
 
-// Generate engagement data from real tweets
-const engagementData = activity?.recentDays ?
-  Object.entries(activity.recentDays).map(([date, dayData]: [string, any]) => ({
-    date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    likes: Math.floor(Math.random() * 10), // TODO: Get real engagement data from Twitter API
-    retweets: Math.floor(Math.random() * 5),
-    replies: Math.floor(Math.random() * 3)
-  })) : []
+// Generate engagement data from real tweets (moved inside component)
+const getEngagementData = (activity: any) => {
+  return activity?.recentDays ?
+    Object.entries(activity.recentDays).map(([date, dayData]: [string, any]) => ({
+      date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      likes: Math.floor(Math.random() * 10), // TODO: Get real engagement data from Twitter API
+      retweets: Math.floor(Math.random() * 5),
+      replies: Math.floor(Math.random() * 3)
+    })) : []
+}
 
-// Generate AI score distribution from real tweets
-const aiScoreDistribution = tweetStats?.bySource ?
-  Object.values(tweetStats.bySource).reduce((acc: any[], source: any) => {
-    // Simulate AI score distribution for now
-    for (let i = 6; i <= 10; i++) {
-      acc.push({ score: `${i}.0`, count: Math.floor(Math.random() * 10) })
-    }
-    return acc
-  }, []) : []
+// Generate AI score distribution from real tweets (moved inside component)
+const getAiScoreDistribution = (tweetStats: any) => {
+  return tweetStats?.bySource ?
+    Object.values(tweetStats.bySource).reduce((acc: any[], source: any) => {
+      // Simulate AI score distribution for now
+      for (let i = 6; i <= 10; i++) {
+        acc.push({ score: `${i}.0`, count: Math.floor(Math.random() * 10) })
+      }
+      return acc
+    }, []) : []
+}
 
 // Generate language distribution (simulated for now)
 const languageDistribution = [
@@ -285,7 +289,7 @@ export default function StatisticsPage() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={engagementData}>
+                  <LineChart data={getEngagementData(activity)}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="date" stroke="#9ca3af" />
                     <YAxis stroke="#9ca3af" />
@@ -348,7 +352,7 @@ export default function StatisticsPage() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={aiScoreDistribution}>
+                  <BarChart data={getAiScoreDistribution(tweetStats)}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="score" stroke="#9ca3af" />
                     <YAxis stroke="#9ca3af" />
