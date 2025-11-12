@@ -147,7 +147,7 @@ class FirebaseStorage {
         return false
       }
 
-      const tweetRecord: TweetRecord = {
+      const tweetRecord: any = {
         id: tweet.id,
         content: tweet.content,
         source: tweet.source,
@@ -156,13 +156,15 @@ class FirebaseStorage {
         ai_score: tweet.aiScore,
         status: tweet.status,
         created_at: tweet.createdAt,
-        posted_at: tweet.postedAt,
-        twitter_id: tweet.twitterId,
         engagement: tweet.engagement,
-        post_error: tweet.postError,
-        rejected_at: tweet.rejectedAt,
         hash,
       }
+
+      // Only add optional fields if they have values
+      if (tweet.postedAt) tweetRecord.posted_at = tweet.postedAt
+      if (tweet.twitterId) tweetRecord.twitter_id = tweet.twitterId
+      if (tweet.postError) tweetRecord.post_error = tweet.postError
+      if (tweet.rejectedAt) tweetRecord.rejected_at = tweet.rejectedAt
 
       const docRef = await addDoc(tweetsRef, tweetRecord)
       console.log(`✅ Tweet saved to Firebase: ${tweet.id}`)
