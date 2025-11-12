@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
-import { supabaseStorage } from "@/lib/supabase-storage"
+import { firebaseStorage } from "@/lib/firebase-storage"
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +15,8 @@ export async function GET(request: NextRequest) {
     const days = parseInt(searchParams.get('days') || '7')
     const includeActivity = searchParams.get('includeActivity') === 'true'
 
-    // Get all tweets from Supabase
-    const allTweets = await supabaseStorage.getAllTweets()
+    // Get all tweets from Firebase
+    const allTweets = await firebaseStorage.getAllTweets()
 
     // Calculate statistics from Supabase data
     const totalProcessed = allTweets.length

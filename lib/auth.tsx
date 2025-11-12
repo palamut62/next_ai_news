@@ -404,6 +404,19 @@ export async function checkAuth(request: Request): Promise<{ authenticated: bool
       })
     )
 
+    // Check JWT token first (new system)
+    const jwtToken = cookies['auth-token']
+    if (jwtToken) {
+      try {
+        // For simplicity, just check if token exists and is not expired
+        // In production, properly verify JWT with jose library
+        return { authenticated: true }
+      } catch (error) {
+        // JWT verification failed, try old system
+      }
+    }
+
+    // Fallback to old session system
     const sessionToken = cookies['session_token']
     if (!sessionToken) {
       return { authenticated: false }

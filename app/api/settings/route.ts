@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { checkAuth, requireAuth } from "@/lib/auth"
-import { supabaseStorage } from "@/lib/supabase-storage"
+import { firebaseStorage } from "@/lib/firebase-storage"
 import fs from "fs/promises"
 import path from "path"
 
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Try to get settings from Supabase first
-    const settings = await supabaseStorage.getSettings();
+    const settings = await firebaseStorage.getSettings();
 
     if (settings) {
       console.log('✅ Settings loaded from Supabase');
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Try to save to Supabase first
-    const supabaseSaved = await supabaseStorage.saveSettings(update);
+    const supabaseSaved = await firebaseStorage.saveSettings(update);
 
     if (supabaseSaved) {
       console.log('✅ Settings saved to Supabase');

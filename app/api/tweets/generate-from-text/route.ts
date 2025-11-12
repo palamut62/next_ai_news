@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { getTwitterCharacterCount, validateTweetLength } from "@/lib/utils"
 import { generateHashtags } from "@/lib/hashtag"
+import { getApiKeyFromFirebaseOrEnv } from "@/lib/firebase-api-keys"
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,12 +22,23 @@ export async function POST(request: NextRequest) {
 
     // Use Gemini AI to generate tweet from text
     try {
+      // Get Gemini API key from Firebase or fallback to env
+      const geminiApiKey = await getApiKeyFromFirebaseOrEnv("gemini", "GEMINI_API_KEY")
+      if (!geminiApiKey) {
+        console.error(`⚠️ Gemini API key not found`)
+        return Response.json({
+          success: false,
+          error: "AI service unavailable",
+          message: "The AI generation service is currently unavailable. Please configure your Gemini API key in Firebase or environment variables."
+        }, { status: 503 })
+      }
+
       // Note: For text-based tweets without URL, we reserve space for 2-3 hashtags
       // Estimated hashtags: ~20-30 characters (including newline)
       const maxHashtagSpace = 30
       const maxTweetContent = 280 - maxHashtagSpace
 
-      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
-import { supabaseStorage } from "@/lib/supabase-storage"
+import { firebaseStorage } from "@/lib/firebase-storage"
 import { isTweetRejected } from "@/lib/rejected-tweets-storage"
 import { logAPIEvent } from "@/lib/audit-logger"
 
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get existing tweets from Supabase
-    const existingTweets = await supabaseStorage.getAllTweets()
+    const existingTweets = await firebaseStorage.getAllTweets()
 
     // Filter out tweets that have been rejected
     const filteredTweets = []
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         createdAt: new Date().toISOString()
       }
 
-      const saved = await supabaseStorage.saveTweet(newTweet)
+      const saved = await firebaseStorage.saveTweet(newTweet)
       if (saved) {
         newTweets.push(newTweet)
       }
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       userEmail: 'test-user@example.com' // auth disabled for testing
     })
 
-    const totalTweets = await supabaseStorage.getAllTweets()
+    const totalTweets = await firebaseStorage.getAllTweets()
 
     return Response.json({
       success: true,

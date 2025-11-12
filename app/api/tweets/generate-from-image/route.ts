@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
+import { getApiKeyFromFirebaseOrEnv } from "@/lib/firebase-api-keys"
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +31,18 @@ export async function POST(request: NextRequest) {
 
     // Use Gemini Vision AI to analyze image and generate tweet
     try {
-      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
+      // Get Gemini API key from Firebase or fallback to env
+      const geminiApiKey = await getApiKeyFromFirebaseOrEnv("gemini", "GEMINI_API_KEY")
+      if (!geminiApiKey) {
+        console.error(`⚠️ Gemini API key not found`)
+        return Response.json({
+          success: false,
+          error: "AI service unavailable",
+          message: "The AI generation service is currently unavailable. Please configure your Gemini API key in Firebase or environment variables."
+        }, { status: 503 })
+      }
+
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,19 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run dev:*)",
-      "Bash(npm run build:*)",
-      "Bash(node:*)",
-      "Bash(curl:*)",
-      "Bash(del:*)",
-      "Bash(taskkill:*)",
+      "Bash(env)",
       "Bash(npm install:*)",
-      "Bash(vercel logs:*)",
-      "Bash(vercel:*)",
-      "Bash(npm run lint:*)",
-      "Bash(npx tsc:*)",
-      "Bash(ssh root@77.37.54.38 'cat > /var/repo/ai-news-app.git/hooks/post-receive << ''''EOF''''\n#!/bin/bash\necho \"\"Starting deployment...\"\"\ncd /root/next_ai_news\ngit --git-dir=/var/repo/ai-news-app.git --work-tree=/root/next_ai_news checkout -f\necho \"\"Files updated successfully\"\"\nnpm install --production\necho \"\"Dependencies installed\"\"\nnpm run build\necho \"\"Build completed\"\"\npm2 restart ai-news-app\necho \"\"Application restarted at $(date)\"\"\nEOF')",
-      "Bash(ssh:*)"
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(find:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

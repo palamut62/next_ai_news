@@ -155,11 +155,12 @@ export default function GitHubPage() {
 
       if (response.ok) {
         // Save the generated tweet to pending list
-        const saveResponse = await fetch(`/api/tweets/save`, {
+        const saveResponse = await fetch(`/api/tweets`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
+            action: "save",
             content: data.tweet,
             source: "github",
             sourceUrl: repo.url,

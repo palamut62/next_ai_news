@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
-import { supabaseStorage } from "@/lib/supabase-storage"
+import { firebaseStorage } from "@/lib/firebase-storage"
 import { getTwitterCharacterCount, validateTweetLength, truncateToCharacterLimit } from "@/lib/utils"
 import { generateHashtags } from "@/lib/hashtag"
+import { getApiKeyFromFirebaseOrEnv } from "@/lib/firebase-api-keys"
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if repository has already been processed (rejected or generated)
-    const isRejected = await supabaseStorage.isGitHubRepoRejected(repo.fullName, repo.url)
+    const isRejected = await firebaseStorage.isGitHubRepoRejected(repo.fullName, repo.url)
     if (isRejected) {
       return Response.json({
         success: false,
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     // Use Gemini AI to generate tweet from GitHub repository
     try {
       // Check if Google API key is available
-      if (!process.env.GOOGLE_API_KEY) {
+      if (!process.env.GEMINI_API_KEY) {
         console.error(`⚠️ Google API key not found for GitHub repo: ${repo.name}`)
         return Response.json({
           success: false,
@@ -44,7 +45,18 @@ export async function POST(request: NextRequest) {
       const reservedForUrl = urlLength + 2 // +2 for \n\n
       const maxTweetContent = 280 - reservedForUrl
 
-      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
+      // Get Gemini API key from Firebase or fallback to env
+      const geminiApiKey = await getApiKeyFromFirebaseOrEnv("gemini", "GEMINI_API_KEY")
+      if (!geminiApiKey) {
+        console.error(`⚠️ Gemini API key not found for GitHub repo: ${repo.name}`)
+        return Response.json({
+          success: false,
+          error: "AI service unavailable",
+          message: "The AI generation service is currently unavailable. Please configure your Gemini API key in Firebase or environment variables."
+        }, { status: 503 })
+      }
+
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +150,7 @@ Generate only the tweet text without URL or hashtags.`
 
         // Mark repository as processed to prevent duplicate generation
         try {
-          await supabaseStorage.addRejectedGitHubRepo({
+          await firebaseStorage.addRejectedGitHubRepo({
             fullName: repo.fullName,
             url: repo.url,
             name: repo.name,

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
-import { supabaseStorage } from "@/lib/supabase-storage"
+import { firebaseStorage } from "@/lib/firebase-storage"
 import Parser from "rss-parser"
 
 export interface TechCrunchArticle {
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       // Check for duplicates before adding
       console.log(`Checking duplicate for: ${item.title}`)
       try {
-        const isDuplicate = await supabaseStorage.isArticleRejected(item.title, item.link)
+        const isDuplicate = await firebaseStorage.isArticleRejected(item.title, item.link)
         if (isDuplicate) {
           console.log(`Skipping duplicate article: ${item.title}`)
           continue
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     let rejectedCount = 0
 
     for (const article of articles) {
-      const isRejected = await supabaseStorage.isArticleRejected(article.title, article.url)
+      const isRejected = await firebaseStorage.isArticleRejected(article.title, article.url)
       if (!isRejected) {
         finalArticles.push(article)
       } else {

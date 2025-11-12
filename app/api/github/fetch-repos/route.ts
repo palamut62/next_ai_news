@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 // import { checkAuth } from "@/lib/auth"
 // import { isDuplicateGitHubRepository } from "@/lib/tweet-storage"
-import { supabaseStorage } from "@/lib/supabase-storage"
+import { firebaseStorage } from "@/lib/firebase-storage"
 
 export const dynamic = 'force-dynamic'
 
@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
     let rejectedCount = 0
 
     for (const repo of uniqueRepos) {
-      const isRejected = await supabaseStorage.isGitHubRepoRejected(repo.fullName, repo.url)
+      const isRejected = await firebaseStorage.isGitHubRepoRejected(repo.fullName, repo.url)
       if (!isRejected) {
         nonRejectedRepos.push(repo)
       } else {

@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { getTwitterCharacterCount, validateTweetLength, truncateToCharacterLimit } from "@/lib/utils"
 import { generateHashtags } from "@/lib/hashtag"
+import { getApiKeyFromFirebaseOrEnv } from "@/lib/firebase-api-keys"
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,12 +62,23 @@ export async function POST(request: NextRequest) {
 
     // Use Gemini AI to generate tweet
     try {
+      // Get Gemini API key from Firebase or fallback to env
+      const geminiApiKey = await getApiKeyFromFirebaseOrEnv("gemini", "GEMINI_API_KEY")
+      if (!geminiApiKey) {
+        console.error(`⚠️ Gemini API key not found`)
+        return Response.json({
+          success: false,
+          error: "AI service unavailable",
+          message: "The AI generation service is currently unavailable. Please configure your Gemini API key in Firebase or environment variables."
+        }, { status: 503 })
+      }
+
       // Calculate space reserved for URL and newlines
       const urlLength = getTwitterCharacterCount(url)
       const reservedForUrl = urlLength + 2 // +2 for \n\n
       const maxTweetContent = 280 - reservedForUrl
 
-      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

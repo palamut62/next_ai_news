@@ -201,10 +201,11 @@ export default function CreateTweetPage() {
     }
 
     try {
-      const response = await fetch("/api/tweets/save", {
+      const response = await fetch("/api/tweets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "save",
           content: generatedTweet,
           source: "manual",
           sourceUrl: activeTab === "link" ? linkUrl : "",

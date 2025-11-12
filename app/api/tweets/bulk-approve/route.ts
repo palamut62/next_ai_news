@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { postTextTweetV2 } from "@/lib/twitter-v2-client"
-import { supabaseStorage } from "@/lib/supabase-storage"
+import { firebaseStorage } from "@/lib/firebase-storage"
 
 
 export async function POST(request: NextRequest) {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
         // Mark the source (article or repo) as processed to prevent duplicate generation
         try {
           if (tweetData.source === 'techcrunch') {
-            await supabaseStorage.addRejectedArticle({
+            await firebaseStorage.addRejectedArticle({
               title: tweetData.sourceTitle,
               url: tweetData.sourceUrl,
               source: "techcrunch",
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
             })
             console.log(`✅ Marked TechCrunch article as processed: ${tweetData.sourceTitle}`)
           } else if (tweetData.source === 'github') {
-            await supabaseStorage.addRejectedGitHubRepo({
+            await firebaseStorage.addRejectedGitHubRepo({
               fullName: tweetData.sourceTitle,
               url: tweetData.sourceUrl,
               name: tweetData.sourceTitle.split('/').pop() || tweetData.sourceTitle,
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 
             // Update tweet status in Supabase
             try {
-              await supabaseStorage.updateTweetStatus(tweetId, 'posted', {
+              await firebaseStorage.updateTweetStatus(tweetId, 'posted', {
                 twitter_id: twitterResult.tweet_id,
                 posted_at: new Date().toISOString()
               })
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
 
             // Update tweet status in Supabase
             try {
-              await supabaseStorage.updateTweetStatus(tweetId, 'approved')
+              await firebaseStorage.updateTweetStatus(tweetId, 'approved')
             } catch (updateError) {
               console.error(`⚠️ Failed to update tweet status in Supabase for ${tweetId}:`, updateError)
             }
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
         } else {
           // Update tweet status to approved in Supabase
           try {
-            await supabaseStorage.updateTweetStatus(tweetId, 'approved')
+            await firebaseStorage.updateTweetStatus(tweetId, 'approved')
           } catch (updateError) {
             console.error(`⚠️ Failed to update tweet status in Supabase for ${tweetId}:`, updateError)
           }

@@ -143,16 +143,16 @@ export default function TechCrunchPage() {
 
       if (response.ok) {
         // Save the generated tweet to pending list
-        const saveResponse = await fetch(`/api/tweets/save`, {
+        const saveResponse = await fetch(`/api/tweets`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: 'include',
           body: JSON.stringify({
+            action: "save",
             content: data.tweet,
             source: "techcrunch",
             sourceUrl: article.url,
             sourceTitle: article.title,
-            newsDate: article.publishedAt,
             aiScore: data.aiScore,
             status: "pending"
           })

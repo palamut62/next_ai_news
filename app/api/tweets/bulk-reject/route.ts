@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
-import { supabaseStorage } from "@/lib/supabase-storage"
+import { firebaseStorage } from "@/lib/firebase-storage"
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current tweets
-    const tweets = await supabaseStorage.getAllTweets()
+    const tweets = await firebaseStorage.getAllTweets()
     const tweetsToReject = tweets.filter(tweet => tweetIds.includes(tweet.id))
 
     if (tweetsToReject.length === 0) {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     let deletedCount = 0
     for (const tweetId of tweetIds) {
       try {
-        const deleted = await supabaseStorage.deleteTweet(tweetId)
+        const deleted = await firebaseStorage.deleteTweet(tweetId)
         if (deleted) {
           deletedCount++
         }

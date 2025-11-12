@@ -1,12 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { checkAuth, requireAuth } from "@/lib/auth"
 import { postTweetToTwitter } from "@/lib/twitter-client"
-import { supabaseStorage } from "@/lib/supabase-storage"
+import { firebaseStorage } from "@/lib/firebase-storage"
 import type { Tweet } from "@/lib/types"
 
 async function getTweets(): Promise<Tweet[]> {
   try {
-    return await supabaseStorage.getAllTweets()
+    return await firebaseStorage.getAllTweets()
   } catch (error) {
     console.error("Failed to get tweets:", error)
     return []
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
               // Mark the source (article or repo) as processed to prevent duplicate generation
               try {
                 if (tweet.source === 'techcrunch') {
-                  await supabaseStorage.addRejectedArticle({
+                  await firebaseStorage.addRejectedArticle({
                     title: tweet.sourceTitle,
                     url: tweet.sourceUrl,
                     source: "techcrunch",
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
                   })
                   console.log(`✅ Marked TechCrunch article as processed: ${tweet.sourceTitle}`)
                 } else if (tweet.source === 'github') {
-                  await supabaseStorage.addRejectedGitHubRepo({
+                  await firebaseStorage.addRejectedGitHubRepo({
                     fullName: tweet.sourceTitle,
                     url: tweet.sourceUrl,
                     name: tweet.sourceTitle.split('/').pop() || tweet.sourceTitle,
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
 
                 // Update status in Supabase database
                 try {
-                  await supabaseStorage.updateTweetStatus(id, "posted", {
+                  await firebaseStorage.updateTweetStatus(id, "posted", {
                     posted_at: new Date().toISOString(),
                     twitter_id: twitterResult.tweetId
                   })
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
                 // Update status in Supabase database to approved
                 try {
-                  await supabaseStorage.updateTweetStatus(id, "approved")
+                  await firebaseStorage.updateTweetStatus(id, "approved")
                   console.log(`✅ Updated tweet status in database to approved: ${id}`)
                 } catch (dbError) {
                   console.error(`❌ Failed to update tweet status in database: ${id}`, dbError)
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
             // Mark the source (article or repo) as processed to prevent duplicate generation
             try {
               if (tweet.source === 'techcrunch') {
-                await supabaseStorage.addRejectedArticle({
+                await firebaseStorage.addRejectedArticle({
                   title: tweet.sourceTitle,
                   url: tweet.sourceUrl,
                   source: "techcrunch",
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
                 })
                 console.log(`✅ Marked TechCrunch article as processed: ${tweet.sourceTitle}`)
               } else if (tweet.source === 'github') {
-                await supabaseStorage.addRejectedGitHubRepo({
+                await firebaseStorage.addRejectedGitHubRepo({
                   fullName: tweet.sourceTitle,
                   url: tweet.sourceUrl,
                   name: tweet.sourceTitle.split('/').pop() || tweet.sourceTitle,
@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
 
               // Update status in Supabase database
               try {
-                await supabaseStorage.updateTweetStatus(tweetId, "posted", {
+                await firebaseStorage.updateTweetStatus(tweetId, "posted", {
                   posted_at: new Date().toISOString(),
                   twitter_id: twitterResult.tweetId
                 })
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
 
               // Update status in Supabase database to approved
               try {
-                await supabaseStorage.updateTweetStatus(tweetId, "approved", {
+                await firebaseStorage.updateTweetStatus(tweetId, "approved", {
                   post_error: twitterResult.error
                 })
                 console.log(`✅ Updated tweet status in database to approved: ${tweetId}`)
@@ -249,7 +249,7 @@ export async function POST(request: NextRequest) {
             try {
               // Mark the source (article or repo) as processed to prevent duplicate generation
               if (tweet.source === 'techcrunch') {
-                await supabaseStorage.addRejectedArticle({
+                await firebaseStorage.addRejectedArticle({
                   title: tweet.sourceTitle,
                   url: tweet.sourceUrl,
                   source: "techcrunch",
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
                 })
                 console.log(`✅ Marked TechCrunch article as processed (rejected): ${tweet.sourceTitle}`)
               } else if (tweet.source === 'github') {
-                await supabaseStorage.addRejectedGitHubRepo({
+                await firebaseStorage.addRejectedGitHubRepo({
                   fullName: tweet.sourceTitle,
                   url: tweet.sourceUrl,
                   name: tweet.sourceTitle.split('/').pop() || tweet.sourceTitle,
@@ -271,7 +271,7 @@ export async function POST(request: NextRequest) {
                 console.log(`✅ Marked GitHub repository as processed (rejected): ${tweet.sourceTitle}`)
               }
 
-              await supabaseStorage.updateTweetStatus(tweet.id, 'rejected')
+              await firebaseStorage.updateTweetStatus(tweet.id, 'rejected')
             } catch (error) {
               console.error(`Failed to store rejected tweet ${tweet.id}:`, error)
             }
@@ -286,7 +286,7 @@ export async function POST(request: NextRequest) {
             try {
               // Mark the source (article or repo) as processed to prevent duplicate generation
               if (tweetToReject.source === 'techcrunch') {
-                await supabaseStorage.addRejectedArticle({
+                await firebaseStorage.addRejectedArticle({
                   title: tweetToReject.sourceTitle,
                   url: tweetToReject.sourceUrl,
                   source: "techcrunch",
@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
                 })
                 console.log(`✅ Marked TechCrunch article as processed (rejected): ${tweetToReject.sourceTitle}`)
               } else if (tweetToReject.source === 'github') {
-                await supabaseStorage.addRejectedGitHubRepo({
+                await firebaseStorage.addRejectedGitHubRepo({
                   fullName: tweetToReject.sourceTitle,
                   url: tweetToReject.sourceUrl,
                   name: tweetToReject.sourceTitle.split('/').pop() || tweetToReject.sourceTitle,
@@ -308,7 +308,7 @@ export async function POST(request: NextRequest) {
                 console.log(`✅ Marked GitHub repository as processed (rejected): ${tweetToReject.sourceTitle}`)
               }
 
-              await supabaseStorage.updateTweetStatus(tweetId, 'rejected')
+              await firebaseStorage.updateTweetStatus(tweetId, 'rejected')
             } catch (error) {
               console.error(`Failed to store rejected tweet ${tweetId}:`, error)
             }
@@ -324,7 +324,7 @@ export async function POST(request: NextRequest) {
         if (tweetIds && Array.isArray(tweetIds)) {
           for (const id of tweetIds) {
             try {
-              await supabaseStorage.deleteTweet(id)
+              await firebaseStorage.deleteTweet(id)
             } catch (error) {
               console.error(`Failed to delete tweet ${id}:`, error)
             }
@@ -332,7 +332,7 @@ export async function POST(request: NextRequest) {
           tweets = tweets.filter(tweet => !tweetIds.includes(tweet.id))
         } else if (tweetId) {
           try {
-            await supabaseStorage.deleteTweet(tweetId)
+            await firebaseStorage.deleteTweet(tweetId)
           } catch (error) {
             console.error(`Failed to delete tweet ${tweetId}:`, error)
           }
@@ -366,7 +366,7 @@ export async function POST(request: NextRequest) {
           engagement: { likes: 0, retweets: 0, replies: 0 }
         }
 
-        const saved = await supabaseStorage.saveTweet(newTweet)
+        const saved = await firebaseStorage.saveTweet(newTweet)
         if (saved) {
           return NextResponse.json({ success: true, tweet: newTweet, message: "Tweet saved successfully" })
         } else {
