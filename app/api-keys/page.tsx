@@ -40,6 +40,11 @@ export default function ApiKeysPage() {
     key_name: '',
     api_key: '',
     description: '',
+    // Twitter specific fields
+    twitter_api_secret: '',
+    twitter_access_token: '',
+    twitter_access_token_secret: '',
+    twitter_bearer_token: '',
   })
   const { toast } = useToast()
 
@@ -76,26 +81,54 @@ export default function ApiKeysPage() {
   const handleAddApiKey = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.key_name || !formData.api_key) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      })
-      return
+    if (formData.service === 'twitter') {
+      // Twitter requires all 5 keys
+      if (!formData.key_name || !formData.api_key || !formData.twitter_api_secret ||
+          !formData.twitter_access_token || !formData.twitter_access_token_secret ||
+          !formData.twitter_bearer_token) {
+        toast({
+          title: "Error",
+          description: "Please fill in all Twitter API key fields",
+          variant: "destructive",
+        })
+        return
+      }
+    } else {
+      // Other services only need api_key
+      if (!formData.key_name || !formData.api_key) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        })
+        return
+      }
     }
 
     try {
+      let requestBody: any = {
+        service: formData.service,
+        key_name: formData.key_name,
+        api_key: formData.api_key,
+        description: formData.description,
+        is_active: true,
+      }
+
+      // For Twitter, store all keys in a JSON format
+      if (formData.service === 'twitter') {
+        requestBody.api_key = JSON.stringify({
+          api_key: formData.api_key,
+          api_secret: formData.twitter_api_secret,
+          access_token: formData.twitter_access_token,
+          access_token_secret: formData.twitter_access_token_secret,
+          bearer_token: formData.twitter_bearer_token,
+        })
+      }
+
       const response = await fetch('/api/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service: formData.service,
-          key_name: formData.key_name,
-          api_key: formData.api_key,
-          description: formData.description,
-          is_active: true,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       // Check if response is JSON
@@ -247,16 +280,76 @@ export default function ApiKeysPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-sm font-medium text-foreground">API Key</label>
-                    <Input
-                      type="password"
-                      placeholder="Paste your API key here"
-                      value={formData.api_key}
-                      onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                      className="mt-1 font-mono"
-                    />
-                  </div>
+                  {/* Twitter-specific fields */}
+                  {formData.service === 'twitter' ? (
+                    <>
+                      <div>
+                        <label className="text-sm font-medium text-foreground">API Key</label>
+                        <Input
+                          type="password"
+                          placeholder="TWITTER_API_KEY"
+                          value={formData.api_key}
+                          onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                          className="mt-1 font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium text-foreground">API Secret</label>
+                        <Input
+                          type="password"
+                          placeholder="TWITTER_API_SECRET"
+                          value={formData.twitter_api_secret}
+                          onChange={(e) => setFormData({ ...formData, twitter_api_secret: e.target.value })}
+                          className="mt-1 font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium text-foreground">Access Token</label>
+                        <Input
+                          type="password"
+                          placeholder="TWITTER_ACCESS_TOKEN"
+                          value={formData.twitter_access_token}
+                          onChange={(e) => setFormData({ ...formData, twitter_access_token: e.target.value })}
+                          className="mt-1 font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium text-foreground">Access Token Secret</label>
+                        <Input
+                          type="password"
+                          placeholder="TWITTER_ACCESS_TOKEN_SECRET"
+                          value={formData.twitter_access_token_secret}
+                          onChange={(e) => setFormData({ ...formData, twitter_access_token_secret: e.target.value })}
+                          className="mt-1 font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium text-foreground">Bearer Token</label>
+                        <Input
+                          type="password"
+                          placeholder="TWITTER_BEARER_TOKEN"
+                          value={formData.twitter_bearer_token}
+                          onChange={(e) => setFormData({ ...formData, twitter_bearer_token: e.target.value })}
+                          className="mt-1 font-mono"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <label className="text-sm font-medium text-foreground">API Key</label>
+                      <Input
+                        type="password"
+                        placeholder="Paste your API key here"
+                        value={formData.api_key}
+                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                        className="mt-1 font-mono"
+                      />
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-sm font-medium text-foreground">Description (Optional)</label>

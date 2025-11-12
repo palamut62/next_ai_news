@@ -3,6 +3,7 @@ import type { Tweet } from '@/lib/types'
 import OAuth from 'oauth-1.0a'
 import crypto from 'crypto'
 import { generateHashtags } from './hashtag'
+import { getApiKeyFromFirebaseOrEnv } from './firebase-api-keys'
 
 interface TwitterConfig {
   apiKey: string
@@ -30,37 +31,79 @@ interface TwitterResponse {
 }
 
 class TwitterClient {
-  private config: TwitterConfig
-  private oauth: OAuth
+  private config: TwitterConfig | null = null
+  private oauth: OAuth | null = null
+  private initialized = false
 
-  constructor() {
-    this.config = {
-      apiKey: process.env.TWITTER_API_KEY || '',
-      apiSecret: process.env.TWITTER_API_SECRET || '',
-      accessToken: process.env.TWITTER_ACCESS_TOKEN || '',
-      accessTokenSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '',
-      bearerToken: process.env.TWITTER_BEARER_TOKEN || ''
-    }
+  async initialize() {
+    if (this.initialized) return
 
-    if (!this.config.apiKey || !this.config.apiSecret ||
-        !this.config.accessToken || !this.config.accessTokenSecret) {
-      throw new Error('Twitter API credentials are not configured properly')
-    }
+    try {
+      // Get Twitter API key from Firebase, which contains all Twitter credentials as JSON
+      const twitterKeyJson = await getApiKeyFromFirebaseOrEnv('twitter', 'TWITTER_API_KEY')
 
-    this.oauth = new OAuth({
-      consumer: {
-        key: this.config.apiKey,
-        secret: this.config.apiSecret
-      },
-      signature_method: 'HMAC-SHA1',
-      hash_function(base_string, key) {
-        return crypto.createHmac('sha1', key).update(base_string).digest('base64')
+      if (!twitterKeyJson) {
+        throw new Error('Twitter API credentials not found in Firebase or environment variables')
       }
-    })
+
+      // Parse the JSON if it's a string
+      let twitterCredentials: any
+      try {
+        twitterCredentials = typeof twitterKeyJson === 'string' ? JSON.parse(twitterKeyJson) : twitterKeyJson
+      } catch {
+        // If not JSON, assume it's the old format with individual env vars
+        twitterCredentials = {
+          api_key: process.env.TWITTER_API_KEY || '',
+          api_secret: process.env.TWITTER_API_SECRET || '',
+          access_token: process.env.TWITTER_ACCESS_TOKEN || '',
+          access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '',
+          bearer_token: process.env.TWITTER_BEARER_TOKEN || ''
+        }
+      }
+
+      this.config = {
+        apiKey: twitterCredentials.api_key || twitterCredentials.apiKey || '',
+        apiSecret: twitterCredentials.api_secret || twitterCredentials.apiSecret || '',
+        accessToken: twitterCredentials.access_token || twitterCredentials.accessToken || '',
+        accessTokenSecret: twitterCredentials.access_token_secret || twitterCredentials.accessTokenSecret || '',
+        bearerToken: twitterCredentials.bearer_token || twitterCredentials.bearerToken || ''
+      }
+
+      if (!this.config.apiKey || !this.config.apiSecret ||
+          !this.config.accessToken || !this.config.accessTokenSecret) {
+        throw new Error('Twitter API credentials are not properly configured')
+      }
+
+      this.oauth = new OAuth({
+        consumer: {
+          key: this.config.apiKey,
+          secret: this.config.apiSecret
+        },
+        signature_method: 'HMAC-SHA1',
+        hash_function(base_string, key) {
+          return crypto.createHmac('sha1', key).update(base_string).digest('base64')
+        }
+      })
+
+      this.initialized = true
+      console.log('✅ Twitter client initialized from Firebase')
+    } catch (error) {
+      console.error('❌ Failed to initialize Twitter client:', error)
+      throw error
+    }
   }
 
   async postTweet(content: string, sourceUrl?: string): Promise<{ success: boolean; tweetId?: string; error?: string }> {
     try {
+      await this.initialize()
+
+      if (!this.config || !this.oauth) {
+        return {
+          success: false,
+          error: 'Twitter client not properly initialized'
+        }
+      }
+
       // Generate hashtags and append to content if there is space
       const hashtags = generateHashtags(content, 4)
       const hashtagsSuffix = hashtags.length ? '\n' + hashtags.join(' ') : ''
@@ -129,6 +172,12 @@ class TwitterClient {
     replies: number
   } | null> {
     try {
+      await this.initialize()
+
+      if (!this.config) {
+        return null
+      }
+
       const response = await fetch(
         `https://api.twitter.com/2/tweets/${tweetId}?tweet.fields=public_metrics`,
         {
@@ -158,6 +207,15 @@ class TwitterClient {
 
   async replyToTweet(parentTweetId: string, content: string): Promise<{ success: boolean; tweetId?: string; error?: string }> {
     try {
+      await this.initialize()
+
+      if (!this.config) {
+        return {
+          success: false,
+          error: 'Twitter client not properly initialized'
+        }
+      }
+
       const response = await fetch('https://api.twitter.com/2/tweets', {
         method: 'POST',
         headers: {
