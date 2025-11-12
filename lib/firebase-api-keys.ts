@@ -10,6 +10,38 @@ import {
   where,
   orderBy,
 } from 'firebase/firestore'
+import crypto from 'crypto'
+
+// Simple encryption/decryption for API keys
+const ENCRYPTION_KEY = process.env.NEXTAUTH_SECRET || 'default-dev-key-change-in-production'
+
+export function encryptApiKey(plainKey: string): string {
+  try {
+    const cipher = crypto.createCipher('aes-256-cbc', ENCRYPTION_KEY)
+    let encrypted = cipher.update(plainKey, 'utf8', 'hex')
+    encrypted += cipher.final('hex')
+    return encrypted
+  } catch (error) {
+    console.warn('Encryption failed, storing plaintext:', error)
+    return plainKey
+  }
+}
+
+export function decryptApiKey(encryptedKey: string): string {
+  try {
+    // Check if it looks like encrypted data (hex string)
+    if (!/^[a-f0-9]+$/.test(encryptedKey)) {
+      return encryptedKey // Not encrypted, return as-is
+    }
+    const decipher = crypto.createDecipher('aes-256-cbc', ENCRYPTION_KEY)
+    let decrypted = decipher.update(encryptedKey, 'hex', 'utf8')
+    decrypted += decipher.final('utf8')
+    return decrypted
+  } catch (error) {
+    console.warn('Decryption failed, returning as plaintext:', error)
+    return encryptedKey
+  }
+}
 
 export interface ApiKey {
   id: string
@@ -99,7 +131,7 @@ class FirebaseApiKeysManager {
         const docRef = doc(db, 'api_keys', existingKey.id)
         const updateData: any = {
           key_name: apiKey.key_name,
-          api_key: apiKey.api_key,
+          api_key: encryptApiKey(apiKey.api_key),
           is_active: apiKey.is_active,
           updated_at: new Date().toISOString(),
         }
@@ -122,7 +154,7 @@ class FirebaseApiKeysManager {
         const newApiKey: any = {
           service: apiKey.service,
           key_name: apiKey.key_name,
-          api_key: apiKey.api_key,
+          api_key: encryptApiKey(apiKey.api_key),
           is_active: apiKey.is_active,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),

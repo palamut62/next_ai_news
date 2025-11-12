@@ -35,6 +35,7 @@ export default function ApiKeysPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set())
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     service: 'gemini',
     key_name: '',
@@ -397,24 +398,50 @@ export default function ApiKeysPage() {
               apiKeys.map((apiKey) => (
                 <Card key={apiKey.id} className="hover:bg-muted/50 transition-colors">
                   <CardContent className="py-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xl">{getProviderIcon(apiKey.service)}</span>
-                          <div>
-                            <h3 className="font-semibold text-foreground">
-                              {apiKey.key_name}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              {getProviderName(apiKey.service)}
-                            </p>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl">{getProviderIcon(apiKey.service)}</span>
+                            <div>
+                              <h3 className="font-semibold text-foreground">
+                                {apiKey.key_name}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {getProviderName(apiKey.service)}
+                              </p>
+                            </div>
                           </div>
+                          {apiKey.description && (
+                            <p className="text-xs text-muted-foreground ml-8 mt-1">
+                              {apiKey.description}
+                            </p>
+                          )}
                         </div>
-                        {apiKey.description && (
-                          <p className="text-xs text-muted-foreground ml-8 mt-1">
-                            {apiKey.description}
-                          </p>
-                        )}
+
+                      {/* API Key Display */}
+                      <div className="bg-muted p-3 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type={visibleKeys.has(apiKey.id) ? "text" : "password"}
+                            value={apiKey.api_key}
+                            readOnly
+                            className="flex-1 bg-background border border-input rounded px-2 py-1 text-sm font-mono"
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleToggleVisibility(apiKey.id)}
+                            title={visibleKeys.has(apiKey.id) ? "Hide" : "Show"}
+                            className="h-8 w-8 p-0"
+                          >
+                            {visibleKeys.has(apiKey.id) ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -435,25 +462,6 @@ export default function ApiKeysPage() {
                               <Check className="h-4 w-4 text-green-500" />
                             ) : (
                               <X className="h-4 w-4 text-red-500" />
-                            )}
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 w-8 p-0"
-                            title={visibleKeys.has(apiKey.id) ? "Hide" : "Show"}
-                          >
-                            {visibleKeys.has(apiKey.id) ? (
-                              <EyeOff
-                                className="h-4 w-4"
-                                onClick={() => handleToggleVisibility(apiKey.id)}
-                              />
-                            ) : (
-                              <Eye
-                                className="h-4 w-4"
-                                onClick={() => handleToggleVisibility(apiKey.id)}
-                              />
                             )}
                           </Button>
 
