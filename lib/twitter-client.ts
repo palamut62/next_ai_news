@@ -93,7 +93,7 @@ class TwitterClient {
     }
   }
 
-  async postTweet(content: string, sourceUrl?: string): Promise<{ success: boolean; tweetId?: string; error?: string }> {
+  async postTweet(content: string, sourceUrl?: string, hashtags?: string[]): Promise<{ success: boolean; tweetId?: string; error?: string }> {
     try {
       await this.initialize()
 
@@ -104,9 +104,9 @@ class TwitterClient {
         }
       }
 
-      // Generate hashtags and append to content if there is space
-      const hashtags = generateHashtags(content, 4)
-      const hashtagsSuffix = hashtags.length ? '\n' + hashtags.join(' ') : ''
+      // Use provided hashtags or generate them if needed
+      const finalHashtags = hashtags && hashtags.length > 0 ? hashtags : generateHashtags(content, 4)
+      const hashtagsSuffix = finalHashtags.length ? '\n' + finalHashtags.join(' ') : ''
       const rawUrl = sourceUrl && sourceUrl.trim() ? sourceUrl.trim() : ''
       let sourceSuffix = ''
       if (rawUrl && !content.includes(rawUrl)) {
@@ -265,13 +265,19 @@ export function createTwitterClient(): TwitterClient {
   return new TwitterClient()
 }
 
-export async function postTweetToTwitter(content: string, sourceUrl?: string): Promise<{
+export async function postTweetToTwitter(content: string, sourceUrl?: string, hashtags?: string[]): Promise<{
   success: boolean
   tweetId?: string
   error?: string
 }> {
   const client = createTwitterClient()
-  return await client.postTweet(content, sourceUrl)
+  const result = await client.postTweet(content, sourceUrl)
+
+  // Include hashtags in the result for reference
+  return {
+    ...result,
+    hashtags: hashtags
+  } as any
 }
 
 export async function updateTweetEngagement(tweetId: string): Promise<{

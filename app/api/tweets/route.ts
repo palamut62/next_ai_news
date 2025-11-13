@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { checkAuth, requireAuth } from "@/lib/auth"
-import { postTweetToTwitter } from "@/lib/twitter-client"
+import { postTextTweetV2 } from "@/lib/twitter-v2-client"
 import { firebaseStorage } from "@/lib/firebase-storage"
 import type { Tweet } from "@/lib/types"
 
@@ -108,13 +108,14 @@ export async function POST(request: NextRequest) {
                 console.error(`⚠️ Failed to mark source as processed for tweet ${id}:`, markError)
               }
 
-              // Post to Twitter
+              // Post to Twitter with hashtags
               console.log(`🐦 Attempting to post tweet ${id}: "${tweet.content.substring(0, 50)}..."`)
-              const twitterResult = await postTweetToTwitter(tweet.content, tweet.sourceUrl)
+              const twitterResult = await postTextTweetV2(tweet.content, tweet.sourceUrl, tweet.hashtags)
               console.log(`📊 Twitter API response for tweet ${id}:`, twitterResult)
 
               if (twitterResult.success) {
-                console.log(`✅ Successfully posted tweet ${id} to Twitter, ID: ${twitterResult.tweetId}`)
+                const tweetId = (twitterResult as any).tweet_id || (twitterResult as any).tweetId
+                console.log(`✅ Successfully posted tweet ${id} to Twitter, ID: ${tweetId}`)
                 // Update tweet status to posted with Twitter ID
                 const tweetIndex = tweets.findIndex(t => t.id === id)
                 if (tweetIndex !== -1) {
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
                     ...tweets[tweetIndex],
                     status: "posted",
                     postedAt: new Date().toISOString(),
-                    twitterId: twitterResult.tweetId
+                    twitterId: tweetId
                   }
                 }
 
@@ -130,14 +131,14 @@ export async function POST(request: NextRequest) {
                 try {
                   await firebaseStorage.updateTweetStatus(id, "posted", {
                     posted_at: new Date().toISOString(),
-                    twitter_id: twitterResult.tweetId
+                    twitter_id: tweetId
                   })
                   console.log(`✅ Updated tweet status in database: ${id}`)
                 } catch (dbError) {
                   console.error(`❌ Failed to update tweet status in database: ${id}`, dbError)
                 }
               } else {
-                console.error(`❌ Failed to post tweet ${id}: ${twitterResult.error}`)
+                console.error(`❌ Failed to post tweet ${id}: ${(twitterResult as any).error || twitterResult}`)
                 // Mark as approved but not posted
                 const tweetIndex = tweets.findIndex(t => t.id === id)
                 if (tweetIndex !== -1) {
@@ -190,17 +191,18 @@ export async function POST(request: NextRequest) {
               console.error(`⚠️ Failed to mark source as processed for tweet ${tweetId}:`, markError)
             }
 
-            // Post to Twitter
-            const twitterResult = await postTweetToTwitter(tweet.content, tweet.sourceUrl)
+            // Post to Twitter with hashtags
+            const twitterResult = await postTextTweetV2(tweet.content, tweet.sourceUrl, tweet.hashtags)
             if (twitterResult.success) {
               // Update tweet status to posted with Twitter ID
+              const tweetIdFromTwitter = (twitterResult as any).tweet_id || (twitterResult as any).tweetId
               const tweetIndex = tweets.findIndex(t => t.id === tweetId)
               if (tweetIndex !== -1) {
                 tweets[tweetIndex] = {
                   ...tweets[tweetIndex],
                   status: "posted",
                   postedAt: new Date().toISOString(),
-                  twitterId: twitterResult.tweetId
+                  twitterId: tweetIdFromTwitter
                 }
               }
 
@@ -208,14 +210,14 @@ export async function POST(request: NextRequest) {
               try {
                 await firebaseStorage.updateTweetStatus(tweetId, "posted", {
                   posted_at: new Date().toISOString(),
-                  twitter_id: twitterResult.tweetId
+                  twitter_id: tweetIdFromTwitter
                 })
                 console.log(`✅ Updated tweet status in database: ${tweetId}`)
               } catch (dbError) {
                 console.error(`❌ Failed to update tweet status in database: ${tweetId}`, dbError)
               }
             } else {
-              console.error(`Failed to post tweet ${tweetId}: ${twitterResult.error}`)
+              console.error(`Failed to post tweet ${tweetId}: ${(twitterResult as any).error || twitterResult}`)
               // Mark as approved but not posted
               const tweetIndex = tweets.findIndex(t => t.id === tweetId)
               if (tweetIndex !== -1) {

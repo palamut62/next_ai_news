@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Bot, Home, MessageSquare, Settings, BarChart3, Github, Bell, Menu, X, Plus, Newspaper, Key, LogOut, User, ChevronDown } from "lucide-react"
+import { Bot, Home, MessageSquare, Settings, BarChart3, Bell, Menu, X, Plus, Newspaper, Key, LogOut, User, ChevronDown } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Home },
@@ -14,7 +14,6 @@ const navigation = [
   { name: "Pending Tweets", href: "/tweets", icon: MessageSquare },
   { name: "TechCrunch News", href: "/techcrunch", icon: Newspaper },
   { name: "Statistics", href: "/statistics", icon: BarChart3 },
-  { name: "GitHub Repos", href: "/github", icon: Github },
   { name: "Twitter Keys", href: "/twitter-api-keys", icon: Key },
   { name: "API Keys", href: "/api-keys", icon: Key },
   { name: "Settings", href: "/settings", icon: Settings },
