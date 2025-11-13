@@ -147,7 +147,16 @@ export default function ApiKeysPage() {
           title: "Success",
           description: `API key for ${formData.service} saved successfully`,
         })
-        setFormData({ service: 'gemini', key_name: '', api_key: '', description: '' })
+        setFormData({
+          service: 'gemini',
+          key_name: '',
+          api_key: '',
+          description: '',
+          twitter_api_secret: '',
+          twitter_access_token: '',
+          twitter_access_token_secret: '',
+          twitter_bearer_token: '',
+        })
         setShowForm(false)
         fetchApiKeys()
       } else {
@@ -229,7 +238,7 @@ export default function ApiKeysPage() {
   }
 
   const getProviderIcon = (service: string) => {
-    return API_PROVIDERS.find(p => p.id === service)?.icon || '🔑'
+    return API_PROVIDERS.find(p => p.id === service)?.icon || 'key'
   }
 
   return (
@@ -418,6 +427,7 @@ export default function ApiKeysPage() {
                             </p>
                           )}
                         </div>
+                      </div>
 
                       {/* API Key Display */}
                       <div className="bg-muted p-3 rounded-lg">
@@ -477,14 +487,6 @@ export default function ApiKeysPage() {
                         </div>
                       </div>
                     </div>
-
-                    {visibleKeys.has(apiKey.id) && apiKey.api_key && (
-                      <div className="mt-3 p-3 bg-muted rounded-md border border-border">
-                        <p className="text-xs font-mono text-foreground break-all">
-                          {apiKey.api_key}
-                        </p>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               ))

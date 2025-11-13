@@ -1,6 +1,17 @@
-import fs from 'fs/promises'
-import path from 'path'
 import type { Tweet } from './types'
+import { db } from './firebase'
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  updateDoc,
+  doc,
+  Timestamp,
+  orderBy,
+  limit,
+} from 'firebase/firestore'
 
 interface StoredTweet extends Tweet {
   processedAt: string
@@ -31,49 +42,10 @@ interface TweetStats {
 }
 
 class TweetStorage {
-  private readonly postedTweetsPath: string
-  private readonly deletedTweetsPath: string
-  private readonly statsPath: string
   private postedTweetsCache: any[] = []
   private deletedTweetsCache: any[] = []
   private statsCache: TweetStats | null = null
   private cacheLoaded = false
-
-  constructor() {
-    // Use temporary directory for Vercel compatibility
-    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
-    this.postedTweetsPath = path.join(tmpDir, 'posted-tweets.json')
-    this.deletedTweetsPath = path.join(tmpDir, 'deleted-tweets.json')
-    this.statsPath = path.join(tmpDir, 'tweet-stats.json')
-  }
-
-  private async ensureDataDirectory(): Promise<void> {
-    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
-    try {
-      await fs.access(tmpDir)
-    } catch {
-      await fs.mkdir(tmpDir, { recursive: true })
-    }
-  }
-
-  private async loadJsonFile<T>(filePath: string, defaultValue: T): Promise<T> {
-    try {
-      await this.ensureDataDirectory()
-      const data = await fs.readFile(filePath, 'utf-8')
-      return JSON.parse(data)
-    } catch (error) {
-      if ((error as any).code === 'ENOENT') {
-        await this.saveJsonFile(filePath, defaultValue)
-        return defaultValue
-      }
-      throw error
-    }
-  }
-
-  private async saveJsonFile<T>(filePath: string, data: T): Promise<void> {
-    await this.ensureDataDirectory()
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2))
-  }
 
   // Generate hash for duplicate detection
   private generateHash(text: string): string {
@@ -90,23 +62,33 @@ class TweetStorage {
   // Check if GitHub repository was already posted
   async isDuplicateGitHubRepository(repoUrl: string): Promise<boolean> {
     try {
-      const postedTweets = await this.loadJsonFile<StoredTweet[]>(this.postedTweetsPath, [])
-      const deletedTweets = await this.loadJsonFile<StoredTweet[]>(this.deletedTweetsPath, [])
+      if (!db) {
+        console.warn('Firebase not initialized')
+        return false
+      }
 
-      const allTweets = [...postedTweets, ...deletedTweets]
+      const postedRef = collection(db, 'posted_tweets')
+      const deletedRef = collection(db, 'deleted_tweets')
 
-      // Check if any GitHub tweet has this repository URL
-      const isDuplicate = allTweets.some(tweet =>
-        tweet.source === 'github' && (
-          tweet.sourceUrl === repoUrl ||
-          tweet.sourceUrl?.toLowerCase() === repoUrl.toLowerCase()
-        )
+      const postedQ = query(
+        postedRef,
+        where('source', '==', 'github'),
+        where('sourceUrl', '==', repoUrl)
+      )
+      const deletedQ = query(
+        deletedRef,
+        where('source', '==', 'github'),
+        where('sourceUrl', '==', repoUrl)
       )
 
-      return isDuplicate
+      const [postedSnapshot, deletedSnapshot] = await Promise.all([
+        getDocs(postedQ),
+        getDocs(deletedQ),
+      ])
+
+      return !postedSnapshot.empty || !deletedSnapshot.empty
     } catch (error) {
       console.error('GitHub duplicate check failed:', error)
-      // If duplicate check fails, assume it's not a duplicate to avoid missing content
       return false
     }
   }
@@ -114,23 +96,33 @@ class TweetStorage {
   // Check if TechCrunch article was already posted
   async isDuplicateTechCrunchArticle(articleUrl: string): Promise<boolean> {
     try {
-      const postedTweets = await this.loadJsonFile<StoredTweet[]>(this.postedTweetsPath, [])
-      const deletedTweets = await this.loadJsonFile<StoredTweet[]>(this.deletedTweetsPath, [])
+      if (!db) {
+        console.warn('Firebase not initialized')
+        return false
+      }
 
-      const allTweets = [...postedTweets, ...deletedTweets]
+      const postedRef = collection(db, 'posted_tweets')
+      const deletedRef = collection(db, 'deleted_tweets')
 
-      // Check if any TechCrunch tweet has this article URL
-      const isDuplicate = allTweets.some(tweet =>
-        tweet.source === 'techcrunch' && (
-          tweet.sourceUrl === articleUrl ||
-          tweet.sourceUrl?.toLowerCase() === articleUrl.toLowerCase()
-        )
+      const postedQ = query(
+        postedRef,
+        where('source', '==', 'techcrunch'),
+        where('sourceUrl', '==', articleUrl)
+      )
+      const deletedQ = query(
+        deletedRef,
+        where('source', '==', 'techcrunch'),
+        where('sourceUrl', '==', articleUrl)
       )
 
-      return isDuplicate
+      const [postedSnapshot, deletedSnapshot] = await Promise.all([
+        getDocs(postedQ),
+        getDocs(deletedQ),
+      ])
+
+      return !postedSnapshot.empty || !deletedSnapshot.empty
     } catch (error) {
       console.error('TechCrunch duplicate check failed:', error)
-      // If duplicate check fails, assume it's not a duplicate to avoid missing content
       return false
     }
   }
@@ -146,10 +138,23 @@ class TweetStorage {
     existingTweet?: StoredTweet
   }> {
     try {
-      const postedTweets = await this.loadJsonFile<StoredTweet[]>(this.postedTweetsPath, [])
-      const deletedTweets = await this.loadJsonFile<StoredTweet[]>(this.deletedTweetsPath, [])
+      if (!db) {
+        console.warn('Firebase not initialized')
+        return { isDuplicate: false }
+      }
 
-      const allTweets = [...postedTweets, ...deletedTweets]
+      const postedRef = collection(db, 'posted_tweets')
+      const deletedRef = collection(db, 'deleted_tweets')
+
+      const [postedSnapshot, deletedSnapshot] = await Promise.all([
+        getDocs(postedRef),
+        getDocs(deletedRef),
+      ])
+
+      const allTweets: StoredTweet[] = [
+        ...postedSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StoredTweet)),
+        ...deletedSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StoredTweet)),
+      ]
 
       // Generate hashes for comparison
       const titleHash = this.generateHash(article.title.toLowerCase().trim())
@@ -168,7 +173,7 @@ class TweetStorage {
         return {
           isDuplicate: true,
           reason: 'Title already processed',
-          existingTweet: titleMatch
+          existingTweet: titleMatch,
         }
       }
 
@@ -182,7 +187,7 @@ class TweetStorage {
         return {
           isDuplicate: true,
           reason: 'URL already processed',
-          existingTweet: urlMatch
+          existingTweet: urlMatch,
         }
       }
 
@@ -197,7 +202,7 @@ class TweetStorage {
           return {
             isDuplicate: true,
             reason: 'Similar content already processed',
-            existingTweet: contentMatch
+            existingTweet: contentMatch,
           }
         }
       }
@@ -211,8 +216,8 @@ class TweetStorage {
         const existingWords = existingTitle.split(/\s+/)
         const newWords = newTitle.split(/\s+/)
 
-        const commonWords = existingWords.filter(word =>
-          word.length > 3 && newWords.includes(word)
+        const commonWords = existingWords.filter(
+          word => word.length > 3 && newWords.includes(word)
         )
 
         return commonWords.length >= 3 // At least 3 meaningful words in common
@@ -222,46 +227,53 @@ class TweetStorage {
         return {
           isDuplicate: true,
           reason: 'Very similar title already processed',
-          existingTweet: similarTitle
+          existingTweet: similarTitle,
         }
       }
 
       return {
-        isDuplicate: false
+        isDuplicate: false,
       }
-
     } catch (error) {
       console.error('Duplicate check failed:', error)
-      // If duplicate check fails, assume it's not a duplicate to avoid missing content
       return {
-        isDuplicate: false
+        isDuplicate: false,
       }
     }
   }
 
   // Save posted tweet
-  async savePostedTweet(tweet: Tweet, originalArticle?: {
-    title: string
-    description?: string
-    url: string
-  }): Promise<void> {
+  async savePostedTweet(
+    tweet: Tweet,
+    originalArticle?: {
+      title: string
+      description?: string
+      url: string
+    }
+  ): Promise<void> {
     try {
-      const postedTweets = await this.loadJsonFile<StoredTweet[]>(this.postedTweetsPath, [])
+      if (!db) {
+        throw new Error('Firebase not initialized')
+      }
 
-      const storedTweet: StoredTweet = {
+      const storedTweet: any = {
         ...tweet,
         processedAt: new Date().toISOString(),
-        duplicateCheck: originalArticle ? {
+        createdAt: Timestamp.now(),
+      }
+
+      if (originalArticle) {
+        storedTweet.duplicateCheck = {
           titleHash: this.generateHash(originalArticle.title.toLowerCase().trim()),
           contentHash: originalArticle.description
             ? this.generateHash(originalArticle.description.toLowerCase().trim().substring(0, 200))
             : '',
-          urlHash: this.generateHash(originalArticle.url.toLowerCase().trim())
-        } : undefined
+          urlHash: this.generateHash(originalArticle.url.toLowerCase().trim()),
+        }
       }
 
-      postedTweets.push(storedTweet)
-      await this.saveJsonFile(this.postedTweetsPath, postedTweets)
+      const postedRef = collection(db, 'posted_tweets')
+      await addDoc(postedRef, storedTweet)
 
       // Update statistics
       await this.updateStats('posted', tweet.source)
@@ -276,15 +288,19 @@ class TweetStorage {
   // Save deleted tweet
   async saveDeletedTweet(tweet: Tweet, reason: string = 'manual_delete'): Promise<void> {
     try {
-      const deletedTweets = await this.loadJsonFile<StoredTweet[]>(this.deletedTweetsPath, [])
-
-      const storedTweet: StoredTweet = {
-        ...tweet,
-        processedAt: new Date().toISOString()
+      if (!db) {
+        throw new Error('Firebase not initialized')
       }
 
-      deletedTweets.push(storedTweet)
-      await this.saveJsonFile(this.deletedTweetsPath, deletedTweets)
+      const storedTweet: any = {
+        ...tweet,
+        processedAt: new Date().toISOString(),
+        reason,
+        createdAt: Timestamp.now(),
+      }
+
+      const deletedRef = collection(db, 'deleted_tweets')
+      await addDoc(deletedRef, storedTweet)
 
       // Update statistics
       await this.updateStats('deleted', tweet.source)
@@ -299,15 +315,35 @@ class TweetStorage {
   // Get statistics
   async getStats(): Promise<TweetStats> {
     try {
-      return await this.loadJsonFile<TweetStats>(this.statsPath, {
+      if (!db) {
+        return {
+          totalProcessed: 0,
+          totalPosted: 0,
+          totalDeleted: 0,
+          totalDuplicates: 0,
+          bySource: {},
+          byDay: {},
+          lastUpdated: new Date().toISOString(),
+        }
+      }
+
+      const statsRef = collection(db, 'tweet_stats')
+      const q = query(statsRef, limit(1))
+      const snapshot = await getDocs(q)
+
+      if (!snapshot.empty) {
+        return snapshot.docs[0].data() as TweetStats
+      }
+
+      return {
         totalProcessed: 0,
         totalPosted: 0,
         totalDeleted: 0,
         totalDuplicates: 0,
         bySource: {},
         byDay: {},
-        lastUpdated: new Date().toISOString()
-      })
+        lastUpdated: new Date().toISOString(),
+      }
     } catch (error) {
       console.error('Failed to get stats:', error)
       throw error
@@ -315,8 +351,15 @@ class TweetStorage {
   }
 
   // Update statistics
-  private async updateStats(action: 'posted' | 'deleted' | 'duplicate', source: string): Promise<void> {
+  private async updateStats(
+    action: 'posted' | 'deleted' | 'duplicate',
+    source: string
+  ): Promise<void> {
     try {
+      if (!db) {
+        return
+      }
+
       const stats = await this.getStats()
       const today = new Date().toISOString().split('T')[0]
 
@@ -336,7 +379,7 @@ class TweetStorage {
           processed: 0,
           posted: 0,
           deleted: 0,
-          duplicates: 0
+          duplicates: 0,
         }
       }
 
@@ -354,7 +397,7 @@ class TweetStorage {
         stats.byDay[today] = {
           processed: 0,
           posted: 0,
-          deleted: 0
+          deleted: 0,
         }
       }
 
@@ -366,7 +409,20 @@ class TweetStorage {
       }
 
       stats.lastUpdated = new Date().toISOString()
-      await this.saveJsonFile(this.statsPath, stats)
+
+      // Save to Firebase
+      const statsRef = collection(db, 'tweet_stats')
+      const q = query(statsRef, limit(1))
+      const snapshot = await getDocs(q)
+
+      if (!snapshot.empty) {
+        // Update existing stats document
+        const docRef = doc(db, 'tweet_stats', snapshot.docs[0].id)
+        await updateDoc(docRef, stats)
+      } else {
+        // Create new stats document
+        await addDoc(statsRef, stats)
+      }
     } catch (error) {
       console.error('Failed to update stats:', error)
     }
@@ -390,9 +446,9 @@ class TweetStorage {
         totalDeleted: stats.totalDeleted,
         totalDuplicates: stats.totalDuplicates,
         topSources: Object.entries(stats.bySource)
-          .sort(([,a], [,b]) => b.posted - a.posted)
-          .slice(0, 5)
-      }
+          .sort(([, a], [, b]) => b.posted - a.posted)
+          .slice(0, 5),
+      },
     }
   }
 }
@@ -409,11 +465,14 @@ export async function isDuplicateArticle(article: {
   return await tweetStorage.isDuplicateArticle(article)
 }
 
-export async function savePostedTweet(tweet: Tweet, article?: {
-  title: string
-  description?: string
-  url: string
-}) {
+export async function savePostedTweet(
+  tweet: Tweet,
+  article?: {
+    title: string
+    description?: string
+    url: string
+  }
+) {
   return await tweetStorage.savePostedTweet(tweet, article)
 }
 

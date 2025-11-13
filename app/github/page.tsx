@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from 'next/navigation'
 import { AuthWrapper } from "@/components/auth-wrapper"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { RepoCard } from "@/components/repo-card"
@@ -13,6 +14,7 @@ import { Search, RefreshCw, Github, TrendingUp, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export default function GitHubPage() {
+  const router = useRouter()
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -175,6 +177,12 @@ export default function GitHubPage() {
             title: "Tweet generated and saved!",
             description: `Created a tweet for ${repo.name} and added to pending tweets.`,
           })
+          // Navigate to pending tweets page after successful save
+          try {
+            router.push('/tweets')
+          } catch (e) {
+            /* ignore */
+          }
         } else {
           toast({
             title: "Tweet generated but save failed",

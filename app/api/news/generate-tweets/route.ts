@@ -54,11 +54,15 @@ export async function POST(request: NextRequest) {
       try {
         // Use Gemini AI to generate tweet from news article
         // Get Gemini API key from Firebase or fallback to env
-        const geminiApiKey = await getApiKeyFromFirebaseOrEnv("gemini", "GEMINI_API_KEY")
+        let geminiApiKey = await getApiKeyFromFirebaseOrEnv("gemini", "GEMINI_API_KEY")
+
         if (!geminiApiKey) {
-          console.warn(`⚠️ Gemini API key not found, skipping article: ${article.title}`)
+          console.warn(`⚠️ Gemini API key not found for article: ${article.title}`)
+          console.warn(`⚠️ Please set GEMINI_API_KEY environment variable or add it to Firebase`)
           continue
         }
+
+        console.log(`✅ Using Gemini API key for article: ${article.title.substring(0, 50)}...`)
 
         const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
           method: 'POST',

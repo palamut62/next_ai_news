@@ -1,6 +1,15 @@
-import fs from 'fs/promises'
-import path from 'path'
 import crypto from 'crypto'
+import { db } from './firebase'
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  deleteDoc,
+  doc,
+  Timestamp,
+} from 'firebase/firestore'
 
 interface RejectedArticle {
   id: string
@@ -14,25 +23,9 @@ interface RejectedArticle {
 }
 
 class RejectedArticlesTracker {
-  private readonly REJECTED_FILE: string
   private rejectedCache: Map<string, RejectedArticle> = new Map()
   private lastCacheUpdate = 0
   private readonly CACHE_TTL = 10 * 60 * 1000 // 10 minutes
-
-  constructor() {
-    // Use temporary directory for Vercel compatibility
-    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
-    this.REJECTED_FILE = path.join(tmpDir, 'rejected-articles.json')
-  }
-
-  private async ensureDataDirectory(): Promise<void> {
-    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
-    try {
-      await fs.access(tmpDir)
-    } catch {
-      await fs.mkdir(tmpDir, { recursive: true })
-    }
-  }
 
   async loadRejectedArticles(): Promise<Map<string, RejectedArticle>> {
     try {
@@ -41,34 +34,49 @@ class RejectedArticlesTracker {
         return this.rejectedCache
       }
 
-      await this.ensureDataDirectory()
-      const data = await fs.readFile(this.REJECTED_FILE, 'utf-8')
-      const articles: RejectedArticle[] = JSON.parse(data)
-
-      this.rejectedCache = new Map(articles.map(article => [article.id, article]))
-      this.lastCacheUpdate = Date.now()
-
-      return this.rejectedCache
-    } catch (error) {
-      if ((error as any).code === 'ENOENT') {
+      if (!db) {
+        console.warn('Firebase not initialized')
         return new Map()
       }
-      throw error
+
+      const rejectedRef = collection(db, 'rejected_articles')
+      const snapshot = await getDocs(rejectedRef)
+
+      this.rejectedCache = new Map()
+      snapshot.docs.forEach(doc => {
+        const data = doc.data()
+        this.rejectedCache.set(data.id, {
+          id: data.id,
+          title: data.title,
+          url: data.url,
+          source: data.source,
+          publishedAt: data.publishedAt,
+          description: data.description,
+          rejectedAt: data.rejectedAt,
+          reason: data.reason,
+        } as RejectedArticle)
+      })
+
+      this.lastCacheUpdate = Date.now()
+      return this.rejectedCache
+    } catch (error) {
+      console.error('Failed to load rejected articles from Firebase:', error)
+      return new Map()
     }
   }
 
   async saveRejectedArticles(articles: Map<string, RejectedArticle>): Promise<void> {
     try {
-      await this.ensureDataDirectory()
-      const data = Array.from(articles.values())
-      await fs.writeFile(this.REJECTED_FILE, JSON.stringify(data, null, 2))
+      if (!db) {
+        console.warn('Firebase not initialized, skipping save')
+        return
+      }
 
       // Update cache
       this.rejectedCache = articles
       this.lastCacheUpdate = Date.now()
     } catch (error) {
       console.error('Failed to save rejected articles:', error)
-      throw error
     }
   }
 
@@ -102,15 +110,23 @@ class RejectedArticlesTracker {
     reason?: string
   }): Promise<void> {
     try {
+      if (!db) {
+        throw new Error('Firebase not initialized')
+      }
+
       const rejectedArticles = await this.loadRejectedArticles()
       const articleId = this.generateArticleId(article)
 
       if (!rejectedArticles.has(articleId)) {
-        const rejectedArticle: RejectedArticle = {
+        const rejectedArticle: any = {
           id: articleId,
           ...article,
-          rejectedAt: new Date().toISOString()
+          rejectedAt: new Date().toISOString(),
+          createdAt: Timestamp.now(),
         }
+
+        const rejectedRef = collection(db, 'rejected_articles')
+        await addDoc(rejectedRef, rejectedArticle)
 
         rejectedArticles.set(articleId, rejectedArticle)
         await this.saveRejectedArticles(rejectedArticles)
@@ -133,7 +149,7 @@ class RejectedArticlesTracker {
         const articleId = this.generateArticleId({
           title: article.title,
           url: article.url,
-          source: article.source || 'techcrunch'
+          source: article.source || 'techcrunch',
         })
 
         if (!rejectedArticles.has(articleId)) {
@@ -164,7 +180,7 @@ class RejectedArticlesTracker {
       const stats = {
         totalRejected: rejectedArticles.size,
         recentRejections: [] as Array<{ date: string; count: number }>,
-        topSources: new Map<string, number>()
+        topSources: new Map<string, number>(),
       }
 
       const dailyRejections = new Map<string, number>()
@@ -189,9 +205,8 @@ class RejectedArticlesTracker {
         ...stats,
         topSources: Array.from(stats.topSources.entries())
           .map(([source, count]) => ({ source, count }))
-          .sort((a, b) => b.count - a.count)
+          .sort((a, b) => b.count - a.count),
       }
-
     } catch (error) {
       console.error('Failed to get rejected articles stats:', error)
       throw error
@@ -201,14 +216,22 @@ class RejectedArticlesTracker {
   // Cleanup old rejected articles
   async cleanup(olderThanDays: number = 90): Promise<number> {
     try {
+      if (!db) {
+        return 0
+      }
+
       const rejectedArticles = await this.loadRejectedArticles()
       const cutoffTime = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000)
 
       let cleanedCount = 0
+      const rejectedRef = collection(db, 'rejected_articles')
+      const snapshot = await getDocs(rejectedRef)
 
-      for (const [id, article] of rejectedArticles) {
+      for (const docSnapshot of snapshot.docs) {
+        const article = docSnapshot.data()
         if (new Date(article.rejectedAt) < cutoffTime) {
-          rejectedArticles.delete(id)
+          await deleteDoc(doc(db, 'rejected_articles', docSnapshot.id))
+          rejectedArticles.delete(article.id)
           cleanedCount++
         }
       }

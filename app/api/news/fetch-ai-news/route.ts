@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server"
 import { checkAuth } from "@/lib/auth"
 import { checkAndFilterNewsArticles, markNewsArticlesProcessed, newsDuplicateDetector } from "@/lib/news-duplicate-detector"
 import { logAPIEvent } from "@/lib/audit-logger"
+import { firebaseApiKeysManager } from "@/lib/firebase-api-keys"
 
 // Enhanced fetch with timeout and retry mechanism
 async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeout = 30000, maxRetries = 2): Promise<Response> {
@@ -68,41 +69,55 @@ export async function fetchAINewsArticles(count: number = 10) {
 
     let articles: NewsArticle[] = []
 
-    // Try NewsAPI first - use the real API key from .env
-    if (process.env.NEWS_API_KEY) {
+    // Get API key from Firebase only
+    try {
+      console.log("🔐 Attempting to retrieve TechCrunch API Key from Firebase...")
+
+      // Get TechCrunch API key from Firebase
+      const newsApiKey = await firebaseApiKeysManager.getActiveApiKey('techcrunch')
+
+      if (!newsApiKey) {
+        console.error("❌ TechCrunch API Key not found in Firebase")
+        console.error("⚠️ Please configure TechCrunch API Key in Firebase:")
+        console.error("   1. Go to Firestore: api_keys collection")
+        console.error("   2. Add document with service: 'techcrunch' and api_key: 'your_key'")
+        throw new Error("TechCrunch API Key not configured in Firebase")
+      }
+
+      console.log(`✅ TechCrunch API Key retrieved from Firebase`)
+
+      // More specific AI-related search terms to get actual AI news
+      const searchQuery = "\"artificial intelligence\" OR \"machine learning\" OR ChatGPT OR OpenAI OR \"Google AI\" OR \"Meta AI\" OR Anthropic OR GPT OR \"generative AI\" OR \"large language model\" OR LLM"
+
+      // Test with a shorter date range first to avoid API limitations
+      const testFromDate = new Date(today)
+      testFromDate.setDate(testFromDate.getDate() - 7) // Last 7 days only
+
+      const newsApiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQuery)}&language=en&sortBy=publishedAt&from=${testFromDate.toISOString().split('T')[0]}&to=${toDate}&pageSize=${count}&apiKey=${newsApiKey}`
+
+      console.log(`📰 Fetching real AI news from NewsAPI (key source: Firebase)`)
       try {
-        // More specific AI-related search terms to get actual AI news
-        const searchQuery = "\"artificial intelligence\" OR \"machine learning\" OR ChatGPT OR OpenAI OR \"Google AI\" OR \"Meta AI\" OR Anthropic OR GPT OR \"generative AI\" OR \"large language model\" OR LLM"
+        const response = await fetchWithTimeout(newsApiUrl, {}, 30000, 2)
+        const text = await response.text()
+        let data: any = {}
+        try { data = JSON.parse(text) } catch { /* ignore non-json */ }
 
-        // Test with a shorter date range first to avoid API limitations
-        const testFromDate = new Date(today)
-        testFromDate.setDate(testFromDate.getDate() - 7) // Last 7 days only
-
-        const newsApiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQuery)}&language=en&sortBy=publishedAt&from=${testFromDate.toISOString().split('T')[0]}&to=${toDate}&pageSize=${count}&apiKey=${process.env.NEWS_API_KEY}`
-
-        console.log(`📰 Fetching real AI news from: ${newsApiUrl}`)
-        try {
-          const response = await fetchWithTimeout(newsApiUrl, {}, 30000, 2)
-          const text = await response.text()
-          let data: any = {}
-          try { data = JSON.parse(text) } catch { /* ignore non-json */ }
-
-          if (response.ok && data.articles && data.articles.length > 0) {
-            articles = data.articles.slice(0, count)
-            console.log(`✅ Successfully fetched ${articles.length} real AI news articles`)
-          } else {
-            console.error(`❌ NewsAPI response status: ${response.status} ${response.statusText}`)
-            console.error('❌ NewsAPI body (first 1000 chars):', text.slice(0, 1000))
-          }
-        } catch (newsApiError) {
-          console.error("❌ NewsAPI failed:", newsApiError)
+        if (response.ok && data.articles && data.articles.length > 0) {
+          articles = data.articles.slice(0, count)
+          console.log(`✅ Successfully fetched ${articles.length} real AI news articles`)
+        } else {
+          console.error(`❌ NewsAPI response status: ${response.status} ${response.statusText}`)
+          console.error('❌ NewsAPI body (first 1000 chars):', text.slice(0, 1000))
         }
       } catch (newsApiError) {
         console.error("❌ NewsAPI failed:", newsApiError)
       }
-    } else {
-      console.error("❌ NEWS_API_KEY not found in environment variables")
-      throw new Error("NEWS_API_KEY not configured")
+    } catch (keyError) {
+      console.error("❌ Failed to retrieve NEWS_API_KEY from Firebase:", keyError)
+      console.error("⚠️ Please configure NEWS_API_KEY in Firebase:")
+      console.error("   1. Go to Firestore: api_keys collection")
+      console.error("   2. Add document with service: 'news_api' and api_key: 'your_key'")
+      throw new Error(`NEWS_API_KEY not accessible: ${keyError instanceof Error ? keyError.message : 'Unknown error'}`)
     }
 
     // If no real articles found from API, try TechCrunch RSS feed for recent AI news

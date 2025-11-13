@@ -23,10 +23,13 @@ export async function POST(request: NextRequest) {
     let postedCount = 0
     let failedCount = 0
 
+    console.log(`🚀 Starting bulk approve process: ${tweetIds.length} tweets, autoPost=${autoPost}`)
+
     for (const tweetId of tweetIds) {
       try {
         // Find the tweet data from the provided tweets array
         const tweetData = tweets?.find((t: any) => t.id === tweetId)
+        console.log(`📋 Processing tweet ${tweetId}, found: ${!!tweetData}`)
 
         if (!tweetData) {
           failedCount++
@@ -109,6 +112,15 @@ export async function POST(request: NextRequest) {
             console.log(`✅ Tweet ${tweetId} approved and posted to Twitter (ID: ${twitterResult.tweet_id})`)
           } else {
             failedCount++
+
+            // Update tweet status in Firebase to approved
+            try {
+              await firebaseStorage.updateTweetStatus(tweetId, 'approved')
+              console.log(`✅ Tweet ${tweetId} status updated to approved in Firebase (Twitter post failed)`)
+            } catch (updateError) {
+              console.error(`❌ Failed to update tweet status in Firebase for ${tweetId}:`, updateError)
+            }
+
             results.push({
               tweetId,
               approved: true,
@@ -119,23 +131,26 @@ export async function POST(request: NextRequest) {
             })
 
             console.error(`❌ Tweet ${tweetId} approved but failed to post: ${twitterResult.error}`, twitterResult.details || '')
-
-            // Update tweet status in Supabase
-            try {
-              await firebaseStorage.updateTweetStatus(tweetId, 'approved')
-            } catch (updateError) {
-              console.error(`⚠️ Failed to update tweet status in Supabase for ${tweetId}:`, updateError)
-            }
           }
 
           // Add delay to respect Twitter API rate limits (300 requests per 3 hours = ~1 every 36 seconds)
           await new Promise(resolve => setTimeout(resolve, 2000))
         } else {
-          // Update tweet status to approved in Supabase
+          // Update tweet status to approved in Firebase
           try {
             await firebaseStorage.updateTweetStatus(tweetId, 'approved')
+            console.log(`✅ Tweet ${tweetId} status updated to approved in Firebase`)
           } catch (updateError) {
-            console.error(`⚠️ Failed to update tweet status in Supabase for ${tweetId}:`, updateError)
+            console.error(`❌ Failed to update tweet status in Firebase for ${tweetId}:`, updateError)
+            failedCount++
+            results.push({
+              tweetId,
+              approved: false,
+              posted: false,
+              error: updateError instanceof Error ? updateError.message : 'Failed to update status',
+              message: "Tweet approved but failed to save status to database"
+            })
+            continue
           }
 
           results.push({

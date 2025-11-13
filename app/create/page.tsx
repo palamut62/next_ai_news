@@ -228,6 +228,13 @@ export default function CreateTweetPage() {
         setLinkUrl("")
         setCustomText("")
         removeImage()
+
+        // Navigate to tweets page to show the saved tweet
+        try {
+          router.push('/tweets')
+        } catch (e) {
+          /* ignore */
+        }
       } else {
         throw new Error("Failed to save tweet")
       }

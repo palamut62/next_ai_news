@@ -3,6 +3,8 @@ import { checkAuth } from "@/lib/auth"
 import { logAPIEvent } from "@/lib/audit-logger"
 import fs from "fs/promises"
 import path from "path"
+import { db } from "@/lib/firebase"
+import { collection, getDocs, query, where } from "firebase/firestore"
 
 const DEFAULT_SETTINGS = {
   automation: {
@@ -46,17 +48,36 @@ const DEFAULT_SETTINGS = {
     temperature: 0.7,
     maxTokens: 280,
   },
-  apiUrl: "http://127.0.0.1:3001/"
+  apiUrl: "http://localhost:3000"
 }
 
-// Function to get settings directly from file (no API calls)
-async function getSettingsFromFile() {
+// Function to get settings from Firebase, fallback to file
+async function getSettings() {
+  try {
+    // Try to get from Firebase
+    if (db) {
+      const settingsRef = collection(db, "settings")
+      const q = query(settingsRef, where("type", "==", "app_settings"))
+      const snapshot = await getDocs(q)
+
+      if (!snapshot.empty) {
+        const settingsDoc = snapshot.docs[0]
+        console.log("✅ Settings loaded from Firebase")
+        return settingsDoc.data()
+      }
+    }
+  } catch (error) {
+    console.warn("⚠️ Failed to load settings from Firebase:", error)
+  }
+
+  // Fallback to file
   try {
     const settingsFile = path.join(process.cwd(), "data", "settings.json")
     const settingsData = await fs.readFile(settingsFile, "utf8")
+    console.log("✅ Settings loaded from file")
     return JSON.parse(settingsData)
   } catch (error) {
-    console.log("Using default settings:", error)
+    console.log("⚠️ Using default settings")
     return DEFAULT_SETTINGS
   }
 }
@@ -77,10 +98,13 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Starting process-news-tweets with count: ${count}`)
 
-    // Get server URL for internal API calls
-    const serverUrl = process.env.NODE_ENV === 'production'
-      ? 'http://77.37.54.38:3001'
-      : 'http://localhost:3001'
+    // Get server URL from settings
+    const settings = await getSettings()
+    const serverUrl = settings.apiUrl || (
+      process.env.NODE_ENV === 'production'
+        ? 'http://77.37.54.38:3000'
+        : 'http://localhost:3000'
+    )
 
     // Step 1: Fetch real AI news articles
     console.log("📰 Step 1: Fetching real AI news articles...")

@@ -15,6 +15,7 @@ const navigation = [
   { name: "TechCrunch News", href: "/techcrunch", icon: Newspaper },
   { name: "Statistics", href: "/statistics", icon: BarChart3 },
   { name: "GitHub Repos", href: "/github", icon: Github },
+  { name: "Twitter Keys", href: "/twitter-api-keys", icon: Key },
   { name: "API Keys", href: "/api-keys", icon: Key },
   { name: "Settings", href: "/settings", icon: Settings },
   { name: "Notifications", href: "/notifications", icon: Bell },
@@ -210,6 +211,14 @@ export function Sidebar() {
                       >
                         <Settings className="h-4 w-4" />
                         Ayarlar
+                      </Link>
+                      <Link
+                        href="/twitter-api-keys"
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800"
+                        onClick={() => setIsProfileOpen(false)}
+                      >
+                        <span className="text-base">𝕏</span>
+                        Twitter Keys
                       </Link>
                       <Link
                         href="/api-keys"

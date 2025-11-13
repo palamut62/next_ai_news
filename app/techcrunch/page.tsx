@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from 'next/navigation'
 import { AuthWrapper } from "@/components/auth-wrapper"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
@@ -14,6 +15,7 @@ import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 
 export default function TechCrunchPage() {
+  const router = useRouter()
   const [articles, setArticles] = useState<TechCrunchArticle[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -163,6 +165,12 @@ export default function TechCrunchPage() {
             title: "Tweet generated and saved!",
             description: `Created a tweet for "${article.title}" and added to pending tweets.`,
           })
+          // Navigate to pending tweets page after successful save
+          try {
+            router.push('/tweets')
+          } catch (e) {
+            /* ignore */
+          }
         } else {
           toast({
             title: "Tweet generated but save failed",

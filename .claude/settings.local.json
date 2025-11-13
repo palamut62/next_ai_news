@@ -10,7 +10,15 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(taskkill /PID 14068 /F)",
-      "Bash(powershell -Command \"Stop-Process -ID 14068 -Force\")"
+      "Bash(powershell -Command \"Stop-Process -ID 14068 -Force\")",
+      "Bash(node -c:*)",
+      "Bash(taskkill:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(powershell:*)",
+      "Bash(ss:*)"
     ],
     "deny": [],
     "ask": []

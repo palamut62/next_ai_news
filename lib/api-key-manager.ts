@@ -1,6 +1,19 @@
-import { encryptData, decryptData, generateSecureToken, getSecureEnv } from './security-utils'
-import fs from 'fs/promises'
-import path from 'path'
+import { encryptData, decryptData, generateSecureToken } from './security-utils'
+import { db } from './firebase'
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDocs,
+  getDoc,
+  query,
+  where,
+  orderBy,
+  Timestamp,
+  writeBatch,
+} from 'firebase/firestore'
 
 interface APIKey {
   id: string
@@ -26,8 +39,6 @@ interface APIKeyUsage {
 }
 
 class APIKeyManager {
-  private readonly KEYS_FILE = path.join(process.cwd(), 'data', 'api-keys.json')
-  private readonly USAGE_FILE = path.join(process.cwd(), 'data', 'api-key-usage.json')
   private keysCache: Map<string, APIKey> = new Map()
   private lastCacheUpdate = 0
   private readonly CACHE_TTL = 5 * 60 * 1000 // 5 minutes
@@ -39,33 +50,89 @@ class APIKeyManager {
         return this.keysCache
       }
 
-      await fs.mkdir(path.dirname(this.KEYS_FILE), { recursive: true })
-      const data = await fs.readFile(this.KEYS_FILE, 'utf-8')
-      const keys: APIKey[] = JSON.parse(data)
-
-      this.keysCache = new Map(keys.map(key => [key.id, key]))
-      this.lastCacheUpdate = Date.now()
-
-      return this.keysCache
-    } catch (error) {
-      if ((error as any).code === 'ENOENT') {
+      if (!db) {
+        console.warn('Firebase not initialized, returning empty cache')
         return new Map()
       }
-      throw error
+
+      const keysRef = collection(db, 'api_keys')
+      const snapshot = await getDocs(keysRef)
+
+      this.keysCache = new Map()
+      snapshot.docs.forEach(doc => {
+        const data = doc.data()
+        this.keysCache.set(doc.id, {
+          id: doc.id,
+          name: data.name,
+          encryptedKey: data.encryptedKey,
+          iv: data.iv,
+          tag: data.tag,
+          type: data.type,
+          environment: data.environment,
+          createdAt: data.createdAt,
+          lastUsed: data.lastUsed,
+          expiresAt: data.expiresAt,
+          rotationRequired: data.rotationRequired || false,
+          accessCount: data.accessCount || 0,
+        } as APIKey)
+      })
+
+      this.lastCacheUpdate = Date.now()
+      return this.keysCache
+    } catch (error) {
+      console.error('Failed to load API keys from Firebase:', error)
+      return new Map()
     }
   }
 
-  async saveKeys(keys: Map<string, APIKey>): Promise<void> {
+  async saveKey(key: APIKey): Promise<void> {
     try {
-      await fs.mkdir(path.dirname(this.KEYS_FILE), { recursive: true })
-      const data = Array.from(keys.values())
-      await fs.writeFile(this.KEYS_FILE, JSON.stringify(data, null, 2))
+      if (!db) {
+        throw new Error('Firebase not initialized')
+      }
+
+      const keysRef = collection(db, 'api_keys')
+      const keyRef = doc(keysRef, key.id)
+
+      await updateDoc(keyRef, {
+        name: key.name,
+        encryptedKey: key.encryptedKey,
+        iv: key.iv,
+        tag: key.tag,
+        type: key.type,
+        environment: key.environment,
+        createdAt: key.createdAt,
+        lastUsed: key.lastUsed,
+        expiresAt: key.expiresAt,
+        rotationRequired: key.rotationRequired,
+        accessCount: key.accessCount,
+      }).catch(async (error: any) => {
+        // If document doesn't exist, create it
+        if (error.code === 'not-found') {
+          await addDoc(keysRef, {
+            id: key.id,
+            name: key.name,
+            encryptedKey: key.encryptedKey,
+            iv: key.iv,
+            tag: key.tag,
+            type: key.type,
+            environment: key.environment,
+            createdAt: key.createdAt,
+            lastUsed: key.lastUsed,
+            expiresAt: key.expiresAt,
+            rotationRequired: key.rotationRequired,
+            accessCount: key.accessCount,
+          })
+        } else {
+          throw error
+        }
+      })
 
       // Update cache
-      this.keysCache = keys
+      this.keysCache.set(key.id, key)
       this.lastCacheUpdate = Date.now()
     } catch (error) {
-      console.error('Failed to save API keys:', error)
+      console.error('Failed to save API key to Firebase:', error)
       throw error
     }
   }
@@ -91,20 +158,38 @@ class APIKeyManager {
         environment,
         createdAt: new Date().toISOString(),
         rotationRequired: false,
-        accessCount: 0
+        accessCount: 0,
       }
 
-      const keys = await this.loadKeys()
-      keys.set(key.id, key)
-      await this.saveKeys(keys)
+      if (!db) {
+        throw new Error('Firebase not initialized')
+      }
+
+      const keysRef = collection(db, 'api_keys')
+      await addDoc(keysRef, {
+        id: key.id,
+        name: key.name,
+        encryptedKey: key.encryptedKey,
+        iv: key.iv,
+        tag: key.tag,
+        type: key.type,
+        environment: key.environment,
+        createdAt: key.createdAt,
+        rotationRequired: key.rotationRequired,
+        accessCount: key.accessCount,
+      })
 
       // Log key creation
       await this.logKeyUsage({
         keyId: key.id,
         timestamp: new Date().toISOString(),
         endpoint: 'create_key',
-        success: true
+        success: true,
       })
+
+      // Update cache
+      this.keysCache.set(key.id, key)
+      this.lastCacheUpdate = Date.now()
 
       return key
     } catch (error) {
@@ -130,14 +215,14 @@ class APIKeyManager {
       // Update usage statistics
       key.accessCount++
       key.lastUsed = new Date().toISOString()
-      await this.saveKeys(keys)
+      await this.saveKey(key)
 
       // Log key access
       await this.logKeyUsage({
         keyId: key.id,
         timestamp: new Date().toISOString(),
         endpoint: 'get_key',
-        success: true
+        success: true,
       })
 
       return decryptData(key.encryptedKey, key.iv, key.tag)
@@ -148,7 +233,7 @@ class APIKeyManager {
         timestamp: new Date().toISOString(),
         endpoint: 'get_key',
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       })
       throw error
     }
@@ -173,18 +258,17 @@ class APIKeyManager {
         iv: encrypted.iv,
         tag: encrypted.tag,
         rotationRequired: false,
-        lastUsed: new Date().toISOString()
+        lastUsed: new Date().toISOString(),
       }
 
-      keys.set(keyId, updatedKey)
-      await this.saveKeys(keys)
+      await this.saveKey(updatedKey)
 
       // Log key rotation
       await this.logKeyUsage({
         keyId,
         timestamp: new Date().toISOString(),
         endpoint: 'rotate_key',
-        success: true
+        success: true,
       })
 
       return updatedKey
@@ -196,22 +280,34 @@ class APIKeyManager {
 
   async deleteKey(keyId: string): Promise<boolean> {
     try {
-      const keys = await this.loadKeys()
-      const deleted = keys.delete(keyId)
-
-      if (deleted) {
-        await this.saveKeys(keys)
-
-        // Log key deletion
-        await this.logKeyUsage({
-          keyId,
-          timestamp: new Date().toISOString(),
-          endpoint: 'delete_key',
-          success: true
-        })
+      if (!db) {
+        throw new Error('Firebase not initialized')
       }
 
-      return deleted
+      const keysRef = collection(db, 'api_keys')
+      const q = query(keysRef, where('id', '==', keyId))
+      const snapshot = await getDocs(q)
+
+      if (snapshot.empty) {
+        return false
+      }
+
+      const docRef = snapshot.docs[0].ref
+      await deleteDoc(docRef)
+
+      // Log key deletion
+      await this.logKeyUsage({
+        keyId,
+        timestamp: new Date().toISOString(),
+        endpoint: 'delete_key',
+        success: true,
+      })
+
+      // Update cache
+      this.keysCache.delete(keyId)
+      this.lastCacheUpdate = Date.now()
+
+      return true
     } catch (error) {
       console.error('Failed to delete API key:', error)
       throw new Error('Failed to delete API key')
@@ -231,7 +327,7 @@ class APIKeyManager {
         ...key,
         encryptedKey: '[REDACTED]',
         iv: '[REDACTED]',
-        tag: '[REDACTED]'
+        tag: '[REDACTED]',
       }))
     } catch (error) {
       console.error('Failed to list API keys:', error)
@@ -246,14 +342,14 @@ class APIKeyManager {
 
       if (key) {
         key.rotationRequired = true
-        await this.saveKeys(keys)
+        await this.saveKey(key)
 
         // Log rotation requirement
         await this.logKeyUsage({
           keyId,
           timestamp: new Date().toISOString(),
           endpoint: 'mark_rotation',
-          success: true
+          success: true,
         })
       }
     } catch (error) {
@@ -292,7 +388,7 @@ class APIKeyManager {
         total: keys.size,
         expired,
         rotationRequired,
-        highUsage
+        highUsage,
       }
     } catch (error) {
       console.error('Failed to check API key health:', error)
@@ -329,26 +425,16 @@ class APIKeyManager {
 
   private async logKeyUsage(usage: APIKeyUsage): Promise<void> {
     try {
-      await fs.mkdir(path.dirname(this.USAGE_FILE), { recursive: true })
-
-      let usages: APIKeyUsage[] = []
-      try {
-        const data = await fs.readFile(this.USAGE_FILE, 'utf-8')
-        usages = JSON.parse(data)
-      } catch (error) {
-        if ((error as any).code !== 'ENOENT') {
-          throw error
-        }
+      if (!db) {
+        console.warn('Firebase not initialized, skipping usage log')
+        return
       }
 
-      usages.push(usage)
-
-      // Keep only last 1000 entries
-      if (usages.length > 1000) {
-        usages = usages.slice(-1000)
-      }
-
-      await fs.writeFile(this.USAGE_FILE, JSON.stringify(usages, null, 2))
+      const usageRef = collection(db, 'api_key_usage')
+      await addDoc(usageRef, {
+        ...usage,
+        createdAt: Timestamp.now(),
+      })
     } catch (error) {
       console.error('Failed to log API key usage:', error)
       // Don't throw for logging errors
@@ -362,29 +448,26 @@ class APIKeyManager {
     popularEndpoints: Array<{ endpoint: string; count: number }>
   }> {
     try {
-      await fs.mkdir(path.dirname(this.USAGE_FILE), { recursive: true })
-
-      let usages: APIKeyUsage[] = []
-      try {
-        const data = await fs.readFile(this.USAGE_FILE, 'utf-8')
-        usages = JSON.parse(data)
-      } catch (error) {
-        if ((error as any).code !== 'ENOENT') {
-          throw error
-        }
+      if (!db) {
+        throw new Error('Firebase not initialized')
       }
 
-      let filteredUsages = usages
+      const usageRef = collection(db, 'api_key_usage')
+      let q = query(usageRef, orderBy('createdAt', 'desc'))
+
       if (keyId) {
-        filteredUsages = usages.filter(u => u.keyId === keyId)
+        q = query(usageRef, where('keyId', '==', keyId), orderBy('createdAt', 'desc'))
       }
 
-      const totalUses = filteredUsages.length
-      const successfulUses = filteredUsages.filter(u => u.success).length
+      const snapshot = await getDocs(q)
+      const usages = snapshot.docs.map(doc => doc.data() as APIKeyUsage)
+
+      const totalUses = usages.length
+      const successfulUses = usages.filter(u => u.success).length
       const successRate = totalUses > 0 ? (successfulUses / totalUses) * 100 : 0
 
       const endpointCounts = new Map<string, number>()
-      filteredUsages.forEach(usage => {
+      usages.forEach(usage => {
         endpointCounts.set(usage.endpoint, (endpointCounts.get(usage.endpoint) || 0) + 1)
       })
 
@@ -393,15 +476,13 @@ class APIKeyManager {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5)
 
-      const lastUsed = filteredUsages.length > 0
-        ? filteredUsages[filteredUsages.length - 1].timestamp
-        : undefined
+      const lastUsed = usages.length > 0 ? usages[0].timestamp : undefined
 
       return {
         totalUses,
         successRate,
         lastUsed,
-        popularEndpoints
+        popularEndpoints,
       }
     } catch (error) {
       console.error('Failed to get usage stats:', error)
@@ -444,5 +525,5 @@ export async function getAICredentials(provider: 'openai' | 'gemini'): Promise<s
     throw new Error(`${provider} API key not found`)
   }
 
-  return await apiKeyManager.getKey(key.id) || ''
+  return (await apiKeyManager.getKey(key.id)) || ''
 }

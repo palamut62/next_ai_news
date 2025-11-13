@@ -13,6 +13,7 @@ export interface Tweet {
   rejectedAt?: string
   twitterId?: string
   postError?: string | null
+  hashtags?: string[]
   engagement?: {
     likes: number
     retweets: number

@@ -1,18 +1,22 @@
-import OAuth from "oauth-1.0a";
-import crypto from "crypto";
+import { TwitterApi } from 'twitter-api-v2'
 import { getTwitterCharacterCount, estimateTotalTweetLength } from './utils'
+import { getActiveTwitterApiKey, decryptApiKey, recordTwitterKeyUsage } from './firebase-api-keys'
 
 export async function postTextTweetV2(
   tweetText: string,
   sourceUrl?: string,
   hashtags?: string[]
 ) {
+  console.log("🚀 postTextTweetV2 called with:", { tweetText: tweetText?.substring(0, 50), sourceUrl, hashtags })
+
   if (!tweetText || !tweetText.trim()) {
+    console.error("❌ Tweet text is empty")
     return { success: false, error: "Tweet metni boş olamaz" };
   }
 
   let text = tweetText.trim()
   const MAX_LENGTH = 280
+  console.log(`✏️ Processing tweet: ${text.substring(0, 50)}...`)
 
   // Use provided hashtags or generate them if needed
   let finalHashtags = hashtags || []
@@ -69,41 +73,70 @@ export async function postTextTweetV2(
       text = "..."
     }
   }
-  const BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN;
-  const API_KEY = process.env.TWITTER_API_KEY;
-  const API_SECRET = process.env.TWITTER_API_SECRET;
-  const ACCESS_TOKEN = process.env.TWITTER_ACCESS_TOKEN;
-  const ACCESS_TOKEN_SECRET = process.env.TWITTER_ACCESS_TOKEN_SECRET;
+  // Get Twitter credentials from Firebase
+  let BEARER_TOKEN: string | null = null;
+  let API_KEY: string | null = null;
+  let API_SECRET: string | null = null;
+  let ACCESS_TOKEN: string | null = null;
+  let ACCESS_TOKEN_SECRET: string | null = null;
+  let TWITTER_KEY_ID: string | null = null;
+
+  try {
+    const twitterKey = await getActiveTwitterApiKey();
+
+    if (twitterKey) {
+      API_KEY = decryptApiKey(twitterKey.api_key);
+      API_SECRET = decryptApiKey(twitterKey.api_secret);
+      ACCESS_TOKEN = decryptApiKey(twitterKey.access_token);
+      ACCESS_TOKEN_SECRET = decryptApiKey(twitterKey.access_token_secret);
+      BEARER_TOKEN = decryptApiKey(twitterKey.bearer_token);
+      TWITTER_KEY_ID = twitterKey.id;
+      console.log(`✅ Using Twitter API key from Firebase: ${twitterKey.key_name}`);
+    } else {
+      // Fallback to environment variables
+      BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN || null;
+      API_KEY = process.env.TWITTER_API_KEY || null;
+      API_SECRET = process.env.TWITTER_API_SECRET || null;
+      ACCESS_TOKEN = process.env.TWITTER_ACCESS_TOKEN || null;
+      ACCESS_TOKEN_SECRET = process.env.TWITTER_ACCESS_TOKEN_SECRET || null;
+      console.warn(`⚠️ No active Twitter API key in Firebase, falling back to environment variables`);
+    }
+  } catch (error) {
+    console.error('❌ Failed to get Twitter API key from Firebase:', error);
+    // Fallback to environment variables
+    BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN || null;
+    API_KEY = process.env.TWITTER_API_KEY || null;
+    API_SECRET = process.env.TWITTER_API_SECRET || null;
+    ACCESS_TOKEN = process.env.TWITTER_ACCESS_TOKEN || null;
+    ACCESS_TOKEN_SECRET = process.env.TWITTER_ACCESS_TOKEN_SECRET || null;
+  }
+
+  console.log("🔐 Twitter credentials check:", {
+    BEARER_TOKEN: BEARER_TOKEN ? "✅ Present" : "❌ Missing",
+    API_KEY: API_KEY ? "✅ Present" : "❌ Missing",
+    API_SECRET: API_SECRET ? "✅ Present" : "❌ Missing",
+    ACCESS_TOKEN: ACCESS_TOKEN ? "✅ Present" : "❌ Missing",
+    ACCESS_TOKEN_SECRET: ACCESS_TOKEN_SECRET ? "✅ Present" : "❌ Missing",
+  })
 
   if (!BEARER_TOKEN || !API_KEY || !API_SECRET || !ACCESS_TOKEN || !ACCESS_TOKEN_SECRET) {
+    console.error("❌ Twitter API anahtarları eksik!")
     return { success: false, error: "Twitter API anahtarları eksik" };
   }
 
-  const oauth = new OAuth({
-    consumer: { key: API_KEY, secret: API_SECRET },
-    signature_method: "HMAC-SHA1",
-    hash_function(base_string: string, key: string) {
-      return crypto.createHmac("sha1", key).update(base_string).digest("base64");
-    },
-  });
+  // Validate that all credentials are valid strings
+  if (typeof API_KEY !== 'string' || typeof API_SECRET !== 'string' ||
+      typeof ACCESS_TOKEN !== 'string' || typeof ACCESS_TOKEN_SECRET !== 'string') {
+    console.error('❌ Twitter credentials are not valid strings after decryption', {
+      API_KEY: typeof API_KEY,
+      API_SECRET: typeof API_SECRET,
+      ACCESS_TOKEN: typeof ACCESS_TOKEN,
+      ACCESS_TOKEN_SECRET: typeof ACCESS_TOKEN_SECRET
+    })
+    return { success: false, error: "Invalid Twitter API credentials format" };
+  }
 
-  const request_data = {
-    url: "https://api.twitter.com/2/tweets",
-    method: "POST",
-    data: {},
-  };
-
-  const token = {
-    key: ACCESS_TOKEN,
-    secret: ACCESS_TOKEN_SECRET,
-  };
-
-  const headers = {
-    ...oauth.toHeader(oauth.authorize(request_data, token)),
-    "Content-Type": "application/json",
-  };
-
-  // Build the final tweet
+  // Build the final tweet FIRST before creating OAuth headers
   let bodyText = text
 
   // Add URL if not already included in text
@@ -122,34 +155,39 @@ export async function postTextTweetV2(
     console.warn(`⚠️ Tweet exceeds 280 characters: ${finalLength} chars. Content: "${bodyText.substring(0, 50)}..."`)
   }
 
-  const response = await fetch(request_data.url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ text: bodyText }),
-  });
-
-  const status = response.status
-  const statusText = response.statusText
-  let rawText: string | null = null
+  // Use twitter-api-v2 library (like Tweepy) for proper OAuth 1.0a handling
   try {
-    rawText = await response.text()
-  } catch (e) {
-    rawText = null
-  }
-  let data: any = null
-  try {
-    data = rawText ? JSON.parse(rawText) : null
-  } catch (e) {
-    data = null
-  }
+    console.log(`📤 Posting tweet to Twitter API v2 using TwitterApi library: "${bodyText.substring(0, 50)}..."`)
 
-  console.log("Twitter API response status:", status, statusText)
-  console.log("Twitter API raw response:", rawText)
+    // Create TwitterApi client with User Context (OAuth 1.0a)
+    const userClient = new TwitterApi({
+      appKey: API_KEY,
+      appSecret: API_SECRET,
+      accessToken: ACCESS_TOKEN,
+      accessSecret: ACCESS_TOKEN_SECRET,
+    });
 
-  if (data.data && data.data.id) {
-    const tweet_id = data.data.id;
+    // Get read/write v2 client
+    const v2Client = userClient.v2;
+
+    console.log('📡 Sending tweet...')
+    const result = await v2Client.tweet(bodyText);
+
+    console.log(`✅ Tweet posted successfully!`)
+    console.log('Tweet data:', result);
+
+    const tweet_id = result.data.id;
     const tweet_url = `https://x.com/i/web/status/${tweet_id}`;
-    console.log(`✅ Tweet posted successfully: ${tweet_url}`)
+
+    // Record usage if we have a Twitter key ID
+    if (TWITTER_KEY_ID) {
+      try {
+        await recordTwitterKeyUsage(TWITTER_KEY_ID);
+      } catch (error) {
+        console.error('Failed to record Twitter key usage:', error);
+      }
+    }
+
     return {
       success: true,
       tweet_id,
@@ -157,11 +195,17 @@ export async function postTextTweetV2(
       hashtags: finalHashtags,
       finalLength: finalLength
     };
-  } else if (data.errors) {
-    console.error(`❌ Twitter API error: ${data.errors.map((e: any) => e.message).join(", ")}`)
-    return { success: false, error: data.errors.map((e: any) => e.message).join(", "), details: data };
-  } else {
-    console.error(`❌ Unknown Twitter API response: ${JSON.stringify(data)}`)
-    return { success: false, error: "Unknown Twitter API response: " + JSON.stringify(data), details: data };
+  } catch (error) {
+    console.error('❌ Error posting tweet:', error);
+
+    // Extract error message
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorDetails = error instanceof Object ? error : {};
+
+    return {
+      success: false,
+      error: errorMessage,
+      details: errorDetails
+    };
   }
 }

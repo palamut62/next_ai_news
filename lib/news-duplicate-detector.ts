@@ -1,6 +1,16 @@
-import fs from 'fs/promises'
-import path from 'path'
 import crypto from 'crypto'
+import { db } from './firebase'
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  updateDoc,
+  deleteDoc,
+  doc,
+  Timestamp,
+} from 'firebase/firestore'
 
 interface NewsArticle {
   id?: string
@@ -22,33 +32,9 @@ interface ProcessedArticle extends NewsArticle {
 }
 
 class NewsDuplicateDetector {
-  private readonly ARTICLES_FILE: string
   private articlesCache: Map<string, ProcessedArticle> = new Map()
   private lastCacheUpdate = 0
   private readonly CACHE_TTL = 10 * 60 * 1000 // 10 minutes
-
-  constructor() {
-    // Use temporary directory for Vercel compatibility
-    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
-    this.ARTICLES_FILE = path.join(tmpDir, 'processed-articles.json')
-  }
-
-  private async ensureDataDirectory(): Promise<void> {
-    const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
-    try {
-      await fs.access(tmpDir)
-      console.log(`✅ Data directory accessible: ${tmpDir}`)
-    } catch {
-      try {
-        await fs.mkdir(tmpDir, { recursive: true })
-        console.log(`✅ Created data directory: ${tmpDir}`)
-      } catch (mkdirError) {
-        console.error(`❌ Failed to create data directory: ${tmpDir}`, mkdirError)
-        // Fallback to memory-only mode
-        throw new Error(`Cannot access or create data directory: ${tmpDir}`)
-      }
-    }
-  }
 
   async loadArticles(): Promise<Map<string, ProcessedArticle>> {
     try {
@@ -58,41 +44,56 @@ class NewsDuplicateDetector {
         return this.articlesCache
       }
 
-      await this.ensureDataDirectory()
-      console.log(`📂 Loading articles from: ${this.ARTICLES_FILE}`)
-      const data = await fs.readFile(this.ARTICLES_FILE, 'utf-8')
-      const articles: ProcessedArticle[] = JSON.parse(data)
-
-      this.articlesCache = new Map(articles.map(article => [article.hash, article]))
-      this.lastCacheUpdate = Date.now()
-
-      console.log(`✅ Loaded ${articles.length} processed articles from disk`)
-      return this.articlesCache
-    } catch (error) {
-      if ((error as any).code === 'ENOENT') {
-        console.log(`📄 No existing articles file found, starting fresh`)
+      if (!db) {
+        console.warn('Firebase not initialized')
         return new Map()
       }
-      console.error('❌ Failed to load articles:', error)
-      // Return empty map instead of throwing to avoid breaking the main functionality
+
+      const articlesRef = collection(db, 'processed_articles')
+      const snapshot = await getDocs(articlesRef)
+
+      this.articlesCache = new Map()
+      snapshot.docs.forEach(doc => {
+        const data = doc.data()
+        this.articlesCache.set(data.hash, {
+          id: doc.id,
+          title: data.title,
+          url: data.url,
+          source: data.source,
+          publishedAt: data.publishedAt,
+          content: data.content,
+          author: data.author,
+          description: data.description,
+          hash: data.hash,
+          processedAt: data.processedAt,
+          lastSeen: data.lastSeen,
+          timesProcessed: data.timesProcessed,
+          sources: data.sources,
+        } as ProcessedArticle)
+      })
+
+      this.lastCacheUpdate = Date.now()
+      console.log(`✅ Loaded ${this.articlesCache.size} processed articles from Firebase`)
+      return this.articlesCache
+    } catch (error) {
+      console.error('❌ Failed to load articles from Firebase:', error)
       return new Map()
     }
   }
 
   async saveArticles(articles: Map<string, ProcessedArticle>): Promise<void> {
     try {
-      await this.ensureDataDirectory()
-      const data = Array.from(articles.values())
-      await fs.writeFile(this.ARTICLES_FILE, JSON.stringify(data, null, 2))
+      if (!db) {
+        console.warn('Firebase not initialized, skipping save')
+        return
+      }
 
       // Update cache
       this.articlesCache = articles
       this.lastCacheUpdate = Date.now()
-      console.log(`💾 Saved ${articles.size} processed articles to disk`)
+      console.log(`💾 Saved ${articles.size} processed articles to Firebase`)
     } catch (error) {
       console.error('❌ Failed to save processed articles:', error)
-      // Don't throw error to avoid breaking the main functionality
-      console.log('⚠️ Continuing with memory-only mode for duplicate detection')
     }
   }
 
@@ -134,21 +135,20 @@ class NewsDuplicateDetector {
   }
 
   // Check if an article is a duplicate
-  async isDuplicate(article: NewsArticle, options: {
-    titleSimilarity?: number
-    contentSimilarity?: number
-    timeWindow?: number // hours
-  } = {}): Promise<{
+  async isDuplicate(
+    article: NewsArticle,
+    options: {
+      titleSimilarity?: number
+      contentSimilarity?: number
+      timeWindow?: number // hours
+    } = {}
+  ): Promise<{
     isDuplicate: boolean
     existingArticle?: ProcessedArticle
     similarity: number
     reason: string
   }> {
-    const {
-      titleSimilarity = 0.85,
-      contentSimilarity = 0.7,
-      timeWindow = 24 // 24 hours
-    } = options
+    const { titleSimilarity = 0.85, contentSimilarity = 0.7, timeWindow = 24 } = options
 
     try {
       const articles = await this.loadArticles()
@@ -161,7 +161,7 @@ class NewsDuplicateDetector {
           isDuplicate: true,
           existingArticle: existing,
           similarity: 1.0,
-          reason: 'exact_hash_match'
+          reason: 'exact_hash_match',
         }
       }
 
@@ -184,7 +184,7 @@ class NewsDuplicateDetector {
             isDuplicate: true,
             existingArticle: existing,
             similarity,
-            reason: `title_similarity_${(similarity * 100).toFixed(1)}%`
+            reason: `title_similarity_${(similarity * 100).toFixed(1)}%`,
           }
         }
       }
@@ -192,15 +192,14 @@ class NewsDuplicateDetector {
       return {
         isDuplicate: false,
         similarity: 0,
-        reason: 'no_similar_articles'
+        reason: 'no_similar_articles',
       }
-
     } catch (error) {
       console.error('Duplicate detection error:', error)
       return {
         isDuplicate: false,
         similarity: 0,
-        reason: 'error_in_detection'
+        reason: 'error_in_detection',
       }
     }
   }
@@ -217,9 +216,7 @@ class NewsDuplicateDetector {
     const content1 = this.createContentFingerprint(article1)
     const content2 = this.createContentFingerprint(article2)
 
-    const contentSimilarity = content1 && content2
-      ? this.calculateStringSimilarity(content1, content2)
-      : 0
+    const contentSimilarity = content1 && content2 ? this.calculateStringSimilarity(content1, content2) : 0
 
     // URL similarity (same article from different sources)
     const urlSimilarity = this.calculateURLSimilarity(article1.url, article2.url)
@@ -228,14 +225,10 @@ class NewsDuplicateDetector {
     const weights = {
       title: 0.6,
       content: 0.3,
-      url: 0.1
+      url: 0.1,
     }
 
-    return (
-      titleSimilarity * weights.title +
-      contentSimilarity * weights.content +
-      urlSimilarity * weights.url
-    )
+    return titleSimilarity * weights.title + contentSimilarity * weights.content + urlSimilarity * weights.url
   }
 
   // Calculate string similarity using Levenshtein distance
@@ -253,7 +246,9 @@ class NewsDuplicateDetector {
 
   // Calculate Levenshtein distance
   private levenshteinDistance(str1: string, str2: string): number {
-    const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null))
+    const matrix = Array(str2.length + 1)
+      .fill(null)
+      .map(() => Array(str1.length + 1).fill(null))
 
     for (let i = 0; i <= str1.length; i++) {
       matrix[0][i] = i
@@ -310,33 +305,56 @@ class NewsDuplicateDetector {
   // Add article to processed list
   async addProcessedArticle(article: NewsArticle): Promise<void> {
     try {
-      const articles = await this.loadArticles()
+      if (!db) {
+        throw new Error('Firebase not initialized')
+      }
+
       const hash = this.generateArticleHash(article)
+      const articlesRef = collection(db, 'processed_articles')
 
-      const existing = articles.get(hash)
+      // Check if article already exists
+      const q = query(articlesRef, where('hash', '==', hash))
+      const snapshot = await getDocs(q)
 
-      if (existing) {
+      if (!snapshot.empty) {
         // Update existing record
-        existing.lastSeen = new Date().toISOString()
-        existing.timesProcessed++
+        const docRef = doc(db, 'processed_articles', snapshot.docs[0].id)
+        const existing = snapshot.docs[0].data()
 
-        if (!existing.sources.includes(article.source)) {
-          existing.sources.push(article.source)
-        }
+        const newSources = [...(existing.sources || []), article.source]
+        const uniqueSources = [...new Set(newSources)]
+
+        await updateDoc(docRef, {
+          lastSeen: new Date().toISOString(),
+          timesProcessed: (existing.timesProcessed || 0) + 1,
+          sources: uniqueSources,
+        })
       } else {
         // Add new record
-        const processed: ProcessedArticle = {
+        const processed: any = {
           ...article,
           hash,
           processedAt: new Date().toISOString(),
           lastSeen: new Date().toISOString(),
           timesProcessed: 1,
-          sources: [article.source]
+          sources: [article.source],
+          createdAt: Timestamp.now(),
         }
 
-        articles.set(hash, processed)
+        await addDoc(articlesRef, processed)
       }
 
+      // Update cache
+      const articles = await this.loadArticles()
+      const processed: ProcessedArticle = {
+        ...article,
+        hash,
+        processedAt: new Date().toISOString(),
+        lastSeen: new Date().toISOString(),
+        timesProcessed: articles.get(hash)?.timesProcessed || 1,
+        sources: [article.source],
+      }
+      articles.set(hash, processed)
       await this.saveArticles(articles)
     } catch (error) {
       console.error('Failed to add processed article:', error)
@@ -345,11 +363,14 @@ class NewsDuplicateDetector {
   }
 
   // Filter out duplicate articles
-  async filterDuplicates(articles: NewsArticle[], options?: {
-    titleSimilarity?: number
-    contentSimilarity?: number
-    timeWindow?: number
-  }): Promise<{
+  async filterDuplicates(
+    articles: NewsArticle[],
+    options?: {
+      titleSimilarity?: number
+      contentSimilarity?: number
+      timeWindow?: number
+    }
+  ): Promise<{
     uniqueArticles: NewsArticle[]
     duplicates: Array<{
       article: NewsArticle
@@ -369,7 +390,7 @@ class NewsDuplicateDetector {
           article,
           similarity: duplicateCheck.similarity,
           reason: duplicateCheck.reason,
-          existingArticle: duplicateCheck.existingArticle
+          existingArticle: duplicateCheck.existingArticle,
         })
       } else {
         uniqueArticles.push(article)
@@ -378,7 +399,7 @@ class NewsDuplicateDetector {
 
     return {
       uniqueArticles,
-      duplicates
+      duplicates,
     }
   }
 
@@ -400,7 +421,7 @@ class NewsDuplicateDetector {
         duplicatesDetected: 0,
         uniqueSources: new Set<string>(),
         averageTimesProcessed: 0,
-        recentActivity: [] as Array<{ date: string; count: number }>
+        recentActivity: [] as Array<{ date: string; count: number }>,
       }
 
       let totalProcessedCount = 0
@@ -425,9 +446,7 @@ class NewsDuplicateDetector {
         }
       }
 
-      stats.averageTimesProcessed = stats.totalProcessed > 0
-        ? totalProcessedCount / stats.totalProcessed
-        : 0
+      stats.averageTimesProcessed = stats.totalProcessed > 0 ? totalProcessedCount / stats.totalProcessed : 0
 
       // Sort daily activity
       stats.recentActivity = Array.from(dailyActivity.entries())
@@ -436,9 +455,8 @@ class NewsDuplicateDetector {
 
       return {
         ...stats,
-        uniqueSources: Array.from(stats.uniqueSources)
+        uniqueSources: Array.from(stats.uniqueSources),
       }
-
     } catch (error) {
       console.error('Failed to get duplicate detection stats:', error)
       throw error
@@ -448,14 +466,22 @@ class NewsDuplicateDetector {
   // Cleanup old articles
   async cleanup(olderThanDays: number = 30): Promise<number> {
     try {
+      if (!db) {
+        return 0
+      }
+
       const articles = await this.loadArticles()
       const cutoffTime = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000)
 
       let cleanedCount = 0
+      const articlesRef = collection(db, 'processed_articles')
+      const snapshot = await getDocs(articlesRef)
 
-      for (const [hash, article] of articles) {
+      for (const docSnapshot of snapshot.docs) {
+        const article = docSnapshot.data()
         if (new Date(article.lastSeen) < cutoffTime) {
-          articles.delete(hash)
+          await deleteDoc(doc(db, 'processed_articles', docSnapshot.id))
+          articles.delete(article.hash)
           cleanedCount++
         }
       }

@@ -1,6 +1,15 @@
-import fs from 'fs/promises'
-import path from 'path'
 import crypto from 'crypto'
+import { db } from './firebase'
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  deleteDoc,
+  doc,
+  Timestamp,
+} from 'firebase/firestore'
 
 interface RejectedGitHubRepo {
   id: string
@@ -15,7 +24,6 @@ interface RejectedGitHubRepo {
 }
 
 class RejectedGitHubReposTracker {
-  private readonly REJECTED_FILE = path.join(process.cwd(), 'data', 'rejected-github-repos.json')
   private rejectedCache: Map<string, RejectedGitHubRepo> = new Map()
   private lastCacheUpdate = 0
   private readonly CACHE_TTL = 10 * 60 * 1000 // 10 minutes
@@ -27,42 +35,50 @@ class RejectedGitHubReposTracker {
         return this.rejectedCache
       }
 
-      // Use temporary directory for Vercel compatibility
-      const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
-      const filePath = path.join(tmpDir, 'rejected-github-repos.json')
-
-      await fs.mkdir(path.dirname(filePath), { recursive: true })
-      const data = await fs.readFile(filePath, 'utf-8')
-      const repos: RejectedGitHubRepo[] = JSON.parse(data)
-
-      this.rejectedCache = new Map(repos.map(repo => [repo.id, repo]))
-      this.lastCacheUpdate = Date.now()
-
-      return this.rejectedCache
-    } catch (error) {
-      if ((error as any).code === 'ENOENT') {
+      if (!db) {
+        console.warn('Firebase not initialized')
         return new Map()
       }
-      throw error
+
+      const reposRef = collection(db, 'rejected_github_repos')
+      const snapshot = await getDocs(reposRef)
+
+      this.rejectedCache = new Map()
+      snapshot.docs.forEach(doc => {
+        const data = doc.data()
+        this.rejectedCache.set(data.id, {
+          id: data.id,
+          name: data.name,
+          url: data.url,
+          fullName: data.fullName,
+          description: data.description,
+          language: data.language,
+          stars: data.stars,
+          rejectedAt: data.rejectedAt,
+          reason: data.reason,
+        } as RejectedGitHubRepo)
+      })
+
+      this.lastCacheUpdate = Date.now()
+      return this.rejectedCache
+    } catch (error) {
+      console.error('Failed to load rejected GitHub repos from Firebase:', error)
+      return new Map()
     }
   }
 
   async saveRejectedRepos(repos: Map<string, RejectedGitHubRepo>): Promise<void> {
     try {
-      // Use temporary directory for Vercel compatibility
-      const tmpDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'data')
-      const filePath = path.join(tmpDir, 'rejected-github-repos.json')
-
-      await fs.mkdir(path.dirname(filePath), { recursive: true })
-      const data = Array.from(repos.values())
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2))
+      if (!db) {
+        console.warn('Firebase not initialized, skipping save')
+        return
+      }
 
       // Update cache
       this.rejectedCache = repos
       this.lastCacheUpdate = Date.now()
     } catch (error) {
       console.error('Failed to save rejected GitHub repos:', error)
-      throw error
     }
   }
 
@@ -97,15 +113,23 @@ class RejectedGitHubReposTracker {
     reason?: string
   }): Promise<void> {
     try {
+      if (!db) {
+        throw new Error('Firebase not initialized')
+      }
+
       const rejectedRepos = await this.loadRejectedRepos()
       const repoId = this.generateRepoId(repo)
 
       if (!rejectedRepos.has(repoId)) {
-        const rejectedRepo: RejectedGitHubRepo = {
+        const rejectedRepo: any = {
           id: repoId,
           ...repo,
-          rejectedAt: new Date().toISOString()
+          rejectedAt: new Date().toISOString(),
+          createdAt: Timestamp.now(),
         }
+
+        const reposRef = collection(db, 'rejected_github_repos')
+        await addDoc(reposRef, rejectedRepo)
 
         rejectedRepos.set(repoId, rejectedRepo)
         await this.saveRejectedRepos(rejectedRepos)
@@ -127,7 +151,7 @@ class RejectedGitHubReposTracker {
       for (const repo of repos) {
         const repoId = this.generateRepoId({
           fullName: repo.fullName,
-          url: repo.url
+          url: repo.url,
         })
 
         if (!rejectedRepos.has(repoId)) {
@@ -158,7 +182,7 @@ class RejectedGitHubReposTracker {
       const stats = {
         totalRejected: rejectedRepos.size,
         recentRejections: [] as Array<{ date: string; count: number }>,
-        topLanguages: new Map<string, number>()
+        topLanguages: new Map<string, number>(),
       }
 
       const dailyRejections = new Map<string, number>()
@@ -184,9 +208,8 @@ class RejectedGitHubReposTracker {
         ...stats,
         topLanguages: Array.from(stats.topLanguages.entries())
           .map(([language, count]) => ({ language, count }))
-          .sort((a, b) => b.count - a.count)
+          .sort((a, b) => b.count - a.count),
       }
-
     } catch (error) {
       console.error('Failed to get rejected GitHub repos stats:', error)
       throw error
@@ -196,14 +219,22 @@ class RejectedGitHubReposTracker {
   // Cleanup old rejected repositories
   async cleanup(olderThanDays: number = 90): Promise<number> {
     try {
+      if (!db) {
+        return 0
+      }
+
       const rejectedRepos = await this.loadRejectedRepos()
       const cutoffTime = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000)
 
       let cleanedCount = 0
+      const reposRef = collection(db, 'rejected_github_repos')
+      const snapshot = await getDocs(reposRef)
 
-      for (const [id, repo] of rejectedRepos) {
+      for (const docSnapshot of snapshot.docs) {
+        const repo = docSnapshot.data()
         if (new Date(repo.rejectedAt) < cutoffTime) {
-          rejectedRepos.delete(id)
+          await deleteDoc(doc(db, 'rejected_github_repos', docSnapshot.id))
+          rejectedRepos.delete(repo.id)
           cleanedCount++
         }
       }

@@ -118,7 +118,7 @@ export default function TweetsPage() {
         // Show success message and refresh tweets
         toast({
           title: "AI News Fetched Successfully! 🎉",
-          description: `Processed ${data.articlesFound} articles and generated ${data.tweetsSaved} tweets.`,
+          description: `Processed ${data.articlesFound} articles and generated ${data.tweetsGenerated} tweets.`,
         })
         fetchTweets()
       } else {
@@ -149,17 +149,8 @@ export default function TweetsPage() {
       tweet.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
       tweet.sourceTitle.toLowerCase().includes(searchQuery.toLowerCase())
 
-    // Additional safety check: ensure posted tweets are filtered out in default view
-    if (statusFilter === "pending" && tweet.status === "posted") {
-      console.log(`⚠️ Filtered out posted tweet from pending view: ${tweet.id}`)
-      return false
-    }
-    if (statusFilter === "pending" && tweet.status === "approved") {
-      console.log(`⚠️ Filtered out approved tweet from pending view: ${tweet.id}`)
-      return false
-    }
-    if (statusFilter === "pending" && tweet.status === "rejected") {
-      console.log(`⚠️ Filtered out rejected tweet from pending view: ${tweet.id}`)
+    // Filter by status
+    if (statusFilter !== "all" && tweet.status !== statusFilter) {
       return false
     }
 
@@ -180,7 +171,9 @@ export default function TweetsPage() {
         return
       }
 
-  const response = await fetch('/api/tweets/bulk-approve', {
+      console.log(`✅ Approving tweet ${id}, autoPost=${autoPost}`)
+
+      const response = await fetch('/api/tweets/bulk-approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,11 +190,13 @@ export default function TweetsPage() {
           title: "Tweet Approved",
           description: autoPost ? "Tweet approved and posted to Twitter!" : "Tweet approved successfully",
         })
-        // Add a small delay to ensure database updates are reflected
+        // Immediately remove from the current view and refresh
+        setTweets(tweets.filter(t => t.id !== id))
+        // Then fetch fresh data from server
         setTimeout(() => {
           console.log("🔄 Refreshing tweets after approval...")
           fetchTweets()
-        }, 2000)
+        }, 500)
   } else {
         toast({
           title: "Approval Failed",
@@ -308,11 +303,13 @@ export default function TweetsPage() {
         })
         setSelectedTweets([])
         setBulkActionsVisible(false)
-        // Add a small delay to ensure database updates are reflected
+        // Immediately remove approved tweets from view and refresh
+        setTweets(tweets.filter(t => !selectedTweets.includes(t.id)))
+        // Then fetch fresh data from server
         setTimeout(() => {
           console.log("🔄 Refreshing tweets after bulk approval...")
           fetchTweets()
-        }, 2000)
+        }, 500)
       } else {
         toast({
           title: "Bulk Approval Failed",
